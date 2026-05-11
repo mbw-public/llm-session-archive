@@ -42,7 +42,7 @@ This toolkit gives you plain markdown that you own  — permanently, can search 
 ## Installation
 
 ```bash
-git clone https://github.com/Monty/llm-session-archive.git
+git clone https://github.com/mbw-public/llm-session-archive.git
 cd llm-session-archive
 chmod +x *.py
 ```
