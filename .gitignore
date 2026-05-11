@@ -1,0 +1,22 @@
+# Output files
+*.csv
+*.tsv
+*.txt
+
+# Markdown files are ignored by default (transcripts, scratch notes)
+# but keep the permanent project docs
+*.md
+!README.md
+!CHANGELOG.md
+
+# Python caches
+__pycache__/
+*.py[cod]
+.ruff_cache/
+
+# Goose databases (may contain private session data)
+*.db
+*.db.zip
+
+# macOS
+.DS_Store
