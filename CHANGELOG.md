@@ -55,6 +55,10 @@ drive.
 default location. Works with all DB-backed commands: `--list`, `--schema`,
 `--all`, and session extraction by ID.
 
+**Bugfix:** `--all --db FILE` was listing sessions correctly but then failing
+to extract each one with "Session not found", because `export_all` was not
+passing `db_path` through to `extract_from_db`. Fixed.
+
 **Usage:**
 ```bash
 python3 goose_extract.py --db ./sessions.db --list

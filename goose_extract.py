@@ -663,6 +663,7 @@ def export_all(
                 show_stats=stats,
                 out_file=str(dest),
                 collapse_results=collapse_results,
+                db_path=db_path,
             )
         except Exception as e:
             print(f"    ERROR: {e}")
