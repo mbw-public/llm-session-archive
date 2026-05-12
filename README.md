@@ -42,7 +42,7 @@ This toolkit gives you plain markdown that you own  — permanently, can search 
 ## Installation
 
 ```bash
-git clone https://github.com/mbw-public/llm-session-archive.git
+git clone https://github.com/Monty/llm-session-archive.git
 cd llm-session-archive
 chmod +x *.py
 ```
@@ -55,21 +55,22 @@ chmod +x *.py
 # List sessions in the default database
 ./goose_extract.py --list
 
-# Extract a session to a file
-./goose_extract.py 20260503_1 --out session.md
+# Extract a session
+./goose_extract.py 20260503_1 > session.md
 
 # Extract with long tool results collapsed into <details> blocks
-./goose_extract.py 20260503_1 --collapse-results 20 --out session.md
+./goose_extract.py 20260503_1 --collapse-results > session.md
+./goose_extract.py 20260503_1 --collapse-results 40 > session.md
 
 # Export all sessions to a directory
 ./goose_extract.py --all --out-dir ./transcripts/
 
 # Work with a database copied from another machine
 ./goose_extract.py --db /path/to/sessions.db --list
-./goose_extract.py --db /path/to/sessions.db 20260503_1 --out session.md
+./goose_extract.py --db /path/to/sessions.db 20260503_1 > session.md
 
 # Extract from a Goose JSON export file
-./goose_extract.py --json session.json --out session.md
+./goose_extract.py --json session.json > session.md
 
 # Stats only (token usage, tool call breakdown)
 ./goose_extract.py 20260503_1 --stats-only
@@ -81,11 +82,15 @@ Override with `--db FILE` or the `GOOSE_DB` environment variable.
 ### Claude Code
 
 ```bash
-# Full transcript + token stats (stdout)
+# Full transcript + token stats
 ./claudecode_extract.py Claude.jsonl > session.md
 
 # Include extended thinking blocks
 ./claudecode_extract.py Claude.jsonl --show-thinking > session.md
+
+# Collapse tool results longer than N lines (default N=20)
+./claudecode_extract.py Claude.jsonl --collapse-results > session.md
+./claudecode_extract.py Claude.jsonl --collapse-results 40 > session.md
 
 # Stats only — token counts, cache hits, stop reasons per turn
 ./claudecode_extract.py Claude.jsonl --stats-only
@@ -109,7 +114,7 @@ before extracting:
 
 ```bash
 # Strip redundant predictionConfig blocks (saves 50–80% on large files)
-./lmstudio_strip.py Qwen.json Qwen_stripped.json
+./lmstudio_strip.py Qwen.json > Qwen_stripped.json
 
 # Extract transcript + performance stats
 ./lmstudio_extract.py Qwen_stripped.json > session.md
@@ -168,7 +173,7 @@ zip sessions.db.zip sessions.db
 
 # On the receiving machine
 ./goose_extract.py --db ./sessions.db --list
-./goose_extract.py --db ./sessions.db 20260503_1 --out session.md
+./goose_extract.py --db ./sessions.db 20260503_1 > session.md
 ./goose_extract.py --db ./sessions.db --all --out-dir ./transcripts/
 ```
 

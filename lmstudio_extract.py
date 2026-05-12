@@ -240,15 +240,30 @@ def extract(path, show_transcript=True, show_stats=True):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Extract LM Studio conversation + stats"
+    ap = argparse.ArgumentParser(
+        description="Extract LM Studio session transcript and stats"
     )
-    parser.add_argument("file", help="Path to LM Studio .json log")
-    parser.add_argument("--stats-only", action="store_true")
-    parser.add_argument("--transcript-only", action="store_true")
-    args = parser.parse_args()
+    ap.add_argument("file", nargs="?", help="Path to LM Studio .json log")
+    ap.add_argument(
+        "--stats-only", action="store_true", help="Stats only, no transcript"
+    )
+    ap.add_argument(
+        "--transcript-only", action="store_true", help="Transcript only, no stats table"
+    )
+    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
+    args = ap.parse_args()
+
+    if not args.file:
+        ap.print_help()
+        sys.exit(0)
 
     show_t = not args.stats_only
     show_s = not args.transcript_only
 
+    if args.out:
+        sys.stdout = open(args.out, "w")
+
     extract(args.file, show_transcript=show_t, show_stats=show_s)
+
+    if args.out:
+        sys.stdout.close()

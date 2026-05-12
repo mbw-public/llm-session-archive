@@ -29,7 +29,7 @@ def fence(content, lang=""):
     return f"```{lang}\n{content}\n```"
 
 
-def flatten_content(blocks, show_thinking=False):
+def flatten_content(blocks, show_thinking=False, collapse_results=None):
     """Render a content block array to markdown."""
     parts = []
     for block in blocks:
@@ -57,12 +57,27 @@ def flatten_content(blocks, show_thinking=False):
                 texts = [i.get("text", "") for i in raw if i.get("type") == "text"]
                 raw = "\n".join(texts)
             raw = raw.replace("\n\n", "\n")
-            parts.append(f"**[TOOL RESULT ← {name}]**\n{fence(raw)}")
+            fenced = fence(raw)
+            n_lines = raw.count("\n") + 1
+            if collapse_results is not None and n_lines > collapse_results:
+                label = f"TOOL RESULT ← {name}"
+                summary = f"**[{label}]**  *({n_lines} lines)*"
+                parts.append(
+                    f"{summary}\n\n<details><summary>Show all {n_lines} lines\u2026</summary>\n\n{fenced}\n\n</details>"
+                )
+            else:
+                parts.append(f"**[TOOL RESULT ← {name}]**\n{fenced}")
 
     return "\n\n".join(p for p in parts if p)
 
 
-def extract(path, show_transcript=True, show_thinking=False, show_stats=True):
+def extract(
+    path,
+    show_transcript=True,
+    show_thinking=False,
+    show_stats=True,
+    collapse_results=None,
+):
     records = []
     with open(path) as f:
         for line in f:
@@ -128,7 +143,7 @@ def extract(path, show_transcript=True, show_thinking=False, show_stats=True):
                 print(f"\n---\n")
                 print(f"**[{msg_num}] USER**\n")
                 if isinstance(content, list):
-                    print(flatten_content(content, show_thinking))
+                    print(flatten_content(content, show_thinking, collapse_results))
                 else:
                     print(content.strip())
 
@@ -162,7 +177,7 @@ def extract(path, show_transcript=True, show_thinking=False, show_stats=True):
 
             msg_num += 1
             if show_transcript:
-                rendered = flatten_content(blocks, show_thinking)
+                rendered = flatten_content(blocks, show_thinking, collapse_results)
                 if rendered:
                     print(f"\n---\n")
                     print(f"**[{msg_num}] ASSISTANT**\n")
@@ -194,23 +209,48 @@ def extract(path, show_transcript=True, show_thinking=False, show_stats=True):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Extract Claude Code session transcript + token stats"
+    ap = argparse.ArgumentParser(
+        description="Extract Claude Code session transcript and stats"
     )
-    parser.add_argument("file", help="Path to Claude Code .jsonl log")
-    parser.add_argument(
+    ap.add_argument("file", nargs="?", help="Path to Claude Code .jsonl log")
+    ap.add_argument(
         "--show-thinking", action="store_true", help="Include extended thinking blocks"
     )
-    parser.add_argument("--stats-only", action="store_true")
-    parser.add_argument("--transcript-only", action="store_true")
-    args = parser.parse_args()
+    ap.add_argument(
+        "--stats-only", action="store_true", help="Stats only, no transcript"
+    )
+    ap.add_argument(
+        "--transcript-only", action="store_true", help="Transcript only, no stats table"
+    )
+    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
+    ap.add_argument(
+        "--collapse-results",
+        metavar="N",
+        type=int,
+        nargs="?",
+        const=20,
+        default=None,
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+    )
+    args = ap.parse_args()
+
+    if not args.file:
+        ap.print_help()
+        sys.exit(0)
 
     show_t = not args.stats_only
     show_s = not args.transcript_only
+
+    if args.out:
+        sys.stdout = open(args.out, "w")
 
     extract(
         args.file,
         show_transcript=show_t,
         show_thinking=args.show_thinking,
         show_stats=show_s,
+        collapse_results=args.collapse_results,
     )
+
+    if args.out:
+        sys.stdout.close()

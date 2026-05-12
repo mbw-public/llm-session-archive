@@ -713,7 +713,10 @@ if __name__ == "__main__":
         "--collapse-results",
         metavar="N",
         type=int,
-        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default: 20)",
+        nargs="?",
+        const=20,
+        default=None,
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
     )
     args = ap.parse_args()
 

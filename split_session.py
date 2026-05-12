@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Split a session markdown file into chunks of N turns each (default 75).
-Usage: python3 split_session.py session-monroe.md
-       python3 split_session.py session-monroe.md --turns 25
-Output: session-monroe-0001-0075.md, session-monroe-0076-0150.md, ...
+Usage: python3 split_session.py <session.md>
+       python3 split_session.py <session.md> --turns 25
+Output: session-0001-0075.md, session-0076-0150.md, ...
 """
 
 import re
@@ -31,7 +31,7 @@ def split_session(src: Path, turns_per_file: int = 75):
     total_turns = len(boundaries)
     print(f"{total_turns} turns found across {len(lines)} lines")
 
-    stem = src.stem  # e.g. "session-monroe"
+    stem = src.stem  # e.g. "session-20260507_1"
     out_dir = src.parent
 
     chunk_start = 0  # index into boundaries[]
@@ -60,11 +60,13 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(
         description="Split a session markdown file into chunks"
     )
-    ap.add_argument(
-        "file", nargs="?", default="session-monroe.md", help="Session markdown file"
-    )
+    ap.add_argument("file", nargs="?", help="Session markdown file to split")
     ap.add_argument(
         "--turns", type=int, default=75, help="Turns per chunk (default: 75)"
     )
     args = ap.parse_args()
+    if not args.file:
+        ap.print_help()
+        sys.exit(0)
+
     split_session(Path(args.file), turns_per_file=args.turns)

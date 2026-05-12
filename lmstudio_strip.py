@@ -6,13 +6,17 @@ Extracts one copy of the predictionConfig to the top level for reference.
 
 Usage:
     python3 lmstudio_strip.py Qwen.json Qwen_stripped.json
+    python3 lmstudio_strip.py Qwen.json > Qwen_stripped.json
 """
 
 import json
+import io
+import os
 import sys
+import argparse
 
 
-def strip(src, dst):
+def strip(src, dst=None):
     with open(src) as f:
         d = json.load(f)
 
@@ -31,20 +35,38 @@ def strip(src, dst):
     if saved_prediction_config:
         d["_predictionConfig"] = saved_prediction_config
 
-    with open(dst, "w") as f:
-        json.dump(d, f, indent=2)
+    if dst:
+        with open(dst, "w") as f:
+            json.dump(d, f, indent=2)
+        dst_size = os.path.getsize(dst)
+    else:
+        buf = io.StringIO()
+        json.dump(d, buf, indent=2)
+        output = buf.getvalue()
+        sys.stdout.write(output)
+        dst_size = len(output.encode())
 
-    src_size = __import__("os").path.getsize(src)
-    dst_size = __import__("os").path.getsize(dst)
-    print(f"Before: {src_size / 1024:.0f} KB")
-    print(f"After:  {dst_size / 1024:.0f} KB")
+    src_size = os.path.getsize(src)
+    print(f"Before: {src_size / 1024:.0f} KB", file=sys.stderr)
+    print(f"After:  {dst_size / 1024:.0f} KB", file=sys.stderr)
     print(
-        f"Saved:  {(src_size - dst_size) / 1024:.0f} KB  ({100 * (src_size - dst_size) / src_size:.0f}%)"
+        f"Saved:  {(src_size - dst_size) / 1024:.0f} KB  ({100 * (src_size - dst_size) / src_size:.0f}%)",
+        file=sys.stderr,
     )
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: lmstudio_strip.py input.json output.json")
-        sys.exit(1)
-    strip(sys.argv[1], sys.argv[2])
+    ap = argparse.ArgumentParser(
+        description="Strip redundant predictionConfig blocks from an LM Studio .json log"
+    )
+    ap.add_argument("input", nargs="?", help="Input LM Studio .json file")
+    ap.add_argument(
+        "output", nargs="?", default=None, help="Output .json file (default: stdout)"
+    )
+    args = ap.parse_args()
+
+    if not args.input:
+        ap.print_help()
+        sys.exit(0)
+
+    strip(args.input, args.output)
