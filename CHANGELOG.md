@@ -1,6 +1,43 @@
-# CHANGELOG — goose_extract.py
+# CHANGELOG — llm-session-archive
 
 All changes in reverse chronological order.
+
+---
+
+## 2026-05-11  Consistency pass across all scripts
+
+**All extractors** (`goose_extract.py`, `claudecode_extract.py`,
+`lmstudio_extract.py`) and utilities (`split_session.py`,
+`lmstudio_strip.py`) now behave consistently:
+
+- Print full `--help` when run with no arguments (previously some scripts
+  printed a bare usage error or a hand-rolled usage line)
+- Use `ap` for the argparse instance
+- Uniform description format: `"Extract <Tool> session transcript and stats"`
+- `--stats-only` and `--transcript-only` have help text in all scripts
+
+**`claudecode_extract.py`**
+- Added `--out FILE` to write directly to a file instead of stdout
+- Added `--collapse-results [N]` (default N=20) to wrap long tool result
+  blocks in `<details>` — same behaviour as `goose_extract.py`
+
+**`lmstudio_extract.py`**
+- Added `--out FILE` to write directly to a file instead of stdout
+
+**`lmstudio_strip.py`**
+- Output now defaults to stdout; stats (before/after/saved) go to stderr
+  so the script composes correctly with shell redirection and pipes
+- Explicit output file still works: `lmstudio_strip.py in.json out.json`
+- Replaced `__import__("os")` hack with a proper top-level `import os`;
+  moved `import io` to top-level imports
+- Converted hand-rolled `sys.argv` parsing to `argparse` with `-h` support
+
+**`split_session.py`**
+- Fixed `file` argument missing `nargs="?"`, which caused argparse to error
+  before the no-args help check could fire
+- Removed references to `session-monroe` example filenames
+
+**`README.md`** updated to reflect all new options and stdout behaviour.
 
 ---
 
