@@ -3,6 +3,7 @@
 *.tsv
 *.txt
 *.json
+*.jsonl
 
 # Markdown files are ignored by default (transcripts, scratch notes)
 # but keep the permanent project docs
