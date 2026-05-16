@@ -4,6 +4,54 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-16  lmstudio_extract.py: add --list and tidy CLI
+
+**`lmstudio_extract.py`**
+
+- `--list` added: shows all conversations in `~/.lmstudio/conversations/`
+  with filename stem, created date, token count, model, and name;
+  sorted newest-first (consistent with `goose_extract.py --list`)
+- Filename stem in `--list` now correctly shows just the epoch number
+  (was showing `<epoch>.conversation` due to double extension on the file)
+- `--conversations-dir DIR` / `LMSTUDIO_CONVERSATIONS` env var to override
+  the default conversations directory
+- `file` positional now also accepts a unique substring of the filename stem
+  (e.g. `17769` resolves to `1776881829866.conversation.json`), in addition
+  to explicit paths
+- `--out FILE` now uses `Path.write_text()` instead of replacing `sys.stdout`
+- Prints full `--help` when run with no arguments (was missing)
+- File header now includes the filename for easier reference
+
+---
+
+## 2026-05-16  Add jan_extract.py
+
+**`jan_extract.py`** — new extractor for the Jan app (jan.ai).
+
+Jan stores threads under `~/Library/Application Support/Jan/data/threads/`,
+one UUID-named directory per thread, each containing `thread.json` (metadata)
+and `messages.jsonl` (one message object per line).
+
+Features consistent with the other extractors:
+- `--list` to show all threads with title, model, timestamp, and token total;
+  sorted newest-first (consistent with other extractors)
+- `--show-thinking` to include `reasoning` blocks (Jan's thinking output)
+- `--stats-only` / `--transcript-only`
+- `--collapse-results` (no-op for now; Jan doesn't produce tool result blocks
+  in the same structure, but the flag is wired up for future use)
+- `--out FILE` to write to a file
+- `--all --out-dir DIR` to batch-export all threads
+- `--threads-dir DIR` / `JAN_THREADS` env var to override the default path
+- Substring matching for thread ID (e.g. `63e1` or `f61c` resolves to the
+  full UUID — any unique fragment works, not just a leading prefix)
+- Ghost empty assistant placeholder messages are silently skipped
+- `close_unclosed_fences()` and `remove_empty_fences()` applied to text blocks
+- Token speed (tok/s) shown in transcript headers and stats table
+- Token total in `--list` summed from `metadata.usage.totalTokens` across
+  assistant messages in `messages.jsonl` (not available in `thread.json`)
+
+---
+
 ## 2026-05-15  Fix unclosed and empty fences in text blocks
 
 **`goose_extract.py`** and **`claudecode_extract.py`**
