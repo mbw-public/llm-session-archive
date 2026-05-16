@@ -4,6 +4,16 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-16  goose_extract.py: show model in --list
+
+**`goose_extract.py`**
+
+`--list` now shows the model name (from `model_config_json`) instead of
+the provider name, in a 45-character column. Provider was redundant with
+the session header; model is more useful for comparing sessions.
+
+---
+
 ## 2026-05-16  lmstudio_extract.py: add --list and tidy CLI
 
 **`lmstudio_extract.py`**
