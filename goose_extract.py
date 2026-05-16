@@ -192,6 +192,19 @@ def strip_fences_from_thinking(text):
     ).strip()
 
 
+def remove_empty_fences(text):
+    """
+    Remove empty fenced code blocks (opener immediately followed by closer,
+    no content between them). Both backtick and tilde variants are handled.
+    Marked 2 misrenders empty fences — treating the closer as content and
+    swallowing subsequent document structure. Empty fences carry no content
+    so removing them loses nothing.
+    """
+    text = re.sub(r"^```[^\n]*\n```[ \t]*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^~~~[^\n]*\n~~~[ \t]*$", "", text, flags=re.MULTILINE)
+    return text.strip()
+
+
 def close_unclosed_fences(content):
     """
     Detect and close any unclosed fenced code blocks in content.
@@ -239,7 +252,10 @@ def render_blocks(blocks, collapse_results=None):
         if btype == "text":
             text = block.get("text", "").strip()
             if text:
-                parts.append(text)
+                text = close_unclosed_fences(text)
+                text = remove_empty_fences(text)
+                if text:
+                    parts.append(text)
 
         elif btype in ("tool_use", "toolRequest"):
             # tool_use: Anthropic format  toolRequest: Goose JSON export format

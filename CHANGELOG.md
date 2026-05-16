@@ -4,6 +4,28 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-15  Fix unclosed and empty fences in text blocks
+
+**`goose_extract.py`** and **`claudecode_extract.py`**
+
+`close_unclosed_fences()` is now applied to plain text blocks in
+`render_blocks()` / `flatten_content()`, not just thinking and collapsed
+tool-result blocks. An unclosed fence left by the model in a text response
+(e.g. an unterminated ` ```scss ` block) was swallowing all subsequent turns
+in the markdown renderer.
+
+`remove_empty_fences()` added and applied after `close_unclosed_fences()`
+on text blocks. Removes empty fenced code blocks (opener immediately followed
+by closer with no content between them, e.g. ` ```scss\n``` `). Marked 2
+misrenders these — treating the closer as content and swallowing subsequent
+document structure. Both backtick and tilde variants are handled. Empty fences
+carry no content so removing them loses nothing.
+
+`close_unclosed_fences()` added to `claudecode_extract.py` (previously only
+lived in `goose_extract.py`).
+
+---
+
 ## 2026-05-11  Consistency pass across all scripts
 
 **All extractors** (`goose_extract.py`, `claudecode_extract.py`,

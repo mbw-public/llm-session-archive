@@ -29,6 +29,40 @@ def fence(content, lang=""):
     return f"```{lang}\n{content}\n```"
 
 
+def close_unclosed_fences(content):
+    """
+    Detect and close any unclosed fenced code blocks in content.
+    An unclosed fence swallows subsequent turns in the markdown renderer.
+    """
+    fence_char = None
+    for line in content.splitlines():
+        stripped = line.strip()
+        if fence_char is None:
+            if stripped.startswith("```"):
+                fence_char = "```"
+            elif stripped.startswith("~~~"):
+                fence_char = "~~~"
+        else:
+            if stripped == fence_char or stripped.rstrip() == fence_char:
+                fence_char = None
+    if fence_char is not None:
+        return content.rstrip() + f"\n{fence_char}"
+    return content
+
+
+def remove_empty_fences(text):
+    """
+    Remove empty fenced code blocks (opener immediately followed by closer,
+    no content between them). Both backtick and tilde variants are handled.
+    Marked 2 misrenders empty fences — treating the closer as content and
+    swallowing subsequent document structure. Empty fences carry no content
+    so removing them loses nothing.
+    """
+    text = re.sub(r"^```[^\n]*\n```[ \t]*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^~~~[^\n]*\n~~~[ \t]*$", "", text, flags=re.MULTILINE)
+    return text.strip()
+
+
 def flatten_content(blocks, show_thinking=False, collapse_results=None):
     """Render a content block array to markdown."""
     parts = []
@@ -43,7 +77,10 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
         elif t == "text":
             text = block.get("text", "").strip()
             if text:
-                parts.append(text)
+                text = close_unclosed_fences(text)
+                text = remove_empty_fences(text)
+                if text:
+                    parts.append(text)
 
         elif t == "tool_use":
             name = block.get("name", "?")
