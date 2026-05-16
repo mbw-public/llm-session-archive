@@ -597,20 +597,26 @@ def list_sessions(n=None, db_path=None):
     cur = con.cursor()
     cur.execute(
         "SELECT id, name, description, created_at, "
-        "accumulated_total_tokens, total_tokens, provider_name "
+        "accumulated_total_tokens, total_tokens, provider_name, model_config_json "
         "FROM sessions ORDER BY created_at DESC" + (f" LIMIT {n}" if n else "")
     )
     rows = cur.fetchall()
     con.close()
 
-    print(f"{'Session ID':<20}  {'Created':<20}  {'Tokens':>8}  {'Provider':<15}  Name")
-    print("-" * 100)
-    for sid, name, desc, created, acc_tok, tok, provider in rows:
+    print(f"{'Session ID':<20}  {'Created':<20}  {'Tokens':>8}  {'Model':<45}  Name")
+    print("-" * 115)
+    for sid, name, desc, created, acc_tok, tok, provider, mc_json in rows:
         label = (name or desc or "(unnamed)")[:45]
         tokens = acc_tok or tok
         tok_s = f"{tokens:,}" if tokens else "-"
-        prov_s = (provider or "-")[:15]
-        print(f"{sid:<20}  {fmt_ts(created):<20}  {tok_s:>8}  {prov_s:<15}  {label}")
+        model = "-"
+        if mc_json:
+            try:
+                mc = json.loads(mc_json)
+                model = mc.get("model_id") or mc.get("model_name") or mc.get("model") or "-"
+            except Exception:
+                pass
+        print(f"{sid:<20}  {fmt_ts(created):<20}  {tok_s:>8}  {model[:45]:<45}  {label}")
 
 
 # ── Schema dump ───────────────────────────────────────────────────────────────
