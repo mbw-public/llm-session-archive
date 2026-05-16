@@ -1,29 +1,124 @@
 #!/usr/bin/env python3
 """
-lmstudio_extract.py — Extract readable transcript + performance stats from an LM Studio .json log.
+lmstudio_extract.py — Extract readable transcripts + stats from LM Studio conversations
 
 Usage:
-    python3 lmstudio_extract.py Qwen.json
-    python3 lmstudio_extract.py Qwen.json --stats-only
-    python3 lmstudio_extract.py Qwen.json --transcript-only
+    python3 lmstudio_extract.py --list
+    python3 lmstudio_extract.py <file>
+    python3 lmstudio_extract.py <file> --stats-only
+    python3 lmstudio_extract.py <file> --transcript-only
+    python3 lmstudio_extract.py <file> --out session.md
+
+<file> is a path to a .conversation.json file, or a unique prefix/substring
+of the filename stem (e.g. "17769" or "1776881829866").
+
+LM Studio stores conversations under:
+  ~/.lmstudio/conversations/<epoch_ms>.conversation.json
+Override via --conversations-dir or the LMSTUDIO_CONVERSATIONS env var.
 """
 
 import json
 import sys
+import os
+import re
 import argparse
 from datetime import datetime
+from pathlib import Path
 
 
-def ts(ms):
-    """Convert millisecond timestamp to readable datetime."""
-    return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
+# ── Data location ─────────────────────────────────────────────────────────────
+
+
+def find_conversations_dir():
+    candidates = [
+        Path.home() / ".lmstudio/conversations",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        "Could not find LM Studio conversations directory. Tried:\n"
+        + "\n".join(f"  {p}" for p in candidates)
+        + "\nSet LMSTUDIO_CONVERSATIONS env var to override."
+    )
+
+
+def get_conversations_dir(override=None):
+    if override:
+        p = Path(override)
+        if not p.exists():
+            raise FileNotFoundError(f"Conversations directory not found: {p}")
+        return p
+    env = os.environ.get("LMSTUDIO_CONVERSATIONS")
+    return Path(env) if env else find_conversations_dir()
+
+
+def all_conversation_files(conv_dir):
+    """Return all .conversation.json files sorted newest-first (by filename epoch)."""
+    return sorted(conv_dir.glob("*.conversation.json"), reverse=True)
+
+
+def stem(f):
+    """Return just the epoch portion of a conversation filename."""
+    return f.name.split(".")[0]
+
+
+def resolve_file(arg, conv_dir=None):
+    """
+    Resolve <arg> to a conversation file path.
+    Accepts:
+      - an explicit path (absolute or relative) that exists
+      - a filename stem or unique prefix/substring matched against the
+        conversations directory
+    """
+    p = Path(arg)
+    if p.exists():
+        return p
+
+    # Try matching against conversations directory
+    try:
+        cdir = get_conversations_dir(conv_dir)
+    except FileNotFoundError:
+        print(f"Error: file not found: {arg}", file=sys.stderr)
+        sys.exit(1)
+
+    files = all_conversation_files(cdir)
+    matches = [f for f in files if arg in stem(f)]
+    if not matches:
+        print(f"Error: no conversation matching '{arg}'", file=sys.stderr)
+        sys.exit(1)
+    if len(matches) > 1:
+        print(
+            f"Error: '{arg}' matches multiple conversations:\n"
+            + "\n".join(f"  {f.name}" for f in matches),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return matches[0]
+
+
+# ── Formatting helpers ────────────────────────────────────────────────────────
+
+
+def fmt_ts(ms):
+    """Convert millisecond timestamp to readable local datetime."""
+    if not ms:
+        return "?"
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(ms)
 
 
 def fence(content, lang=""):
     """Choose backtick or tilde fence depending on content."""
+    content = content.rstrip()
     if "```" in content:
         return f"~~~{lang}\n{content}\n~~~"
     return f"```{lang}\n{content}\n```"
+
+
+# ── Content rendering ─────────────────────────────────────────────────────────
 
 
 def unescape_text(content_blocks):
@@ -36,34 +131,32 @@ def unescape_text(content_blocks):
 
 
 def flatten_content(content_blocks):
-    """Extract plain text from a content array."""
+    """Render a content block array to markdown."""
     parts = []
     for block in content_blocks:
         t = block.get("type", "")
         if t == "text":
             parts.append(block.get("text", "").strip())
+
         elif t == "toolCallRequest":
             name = block.get("name", "?")
             params = json.dumps(block.get("parameters", {}), indent=2)
             parts.append(f"**[TOOL CALL → {name}]**\n{fence(params, 'json')}")
+
         elif t == "toolCallResult":
             name = block.get("name", "?")
             raw = block.get("content", "")
             try:
                 parsed = json.loads(raw)
                 if isinstance(parsed, list):
-                    # Text block array — extract and unescape
                     unescaped = unescape_text(parsed)
                     result_str = (unescaped or "").replace("\n\n", "\n")
-                    # Second pass: decode any remaining literal \n \t \" escape sequences
                     result_str = (
                         result_str.replace("\\n", "\n")
                         .replace("\\t", "\t")
                         .replace('\\"', '"')
                     )
-                    result_str = result_str.replace(
-                        "\n\n", "\n"
-                    )  # collapse doubles introduced above
+                    result_str = result_str.replace("\n\n", "\n")
                     lang = ""
                     if result_str.startswith("#!"):
                         first_line = result_str.splitlines()[0]
@@ -75,7 +168,6 @@ def flatten_content(content_blocks):
                         f"**[TOOL RESULT ← {name}]**\n{fence(result_str, lang)}"
                     )
                 elif isinstance(parsed, dict):
-                    # Structured result (e.g. exit_code/stdout/stderr) — unescape string values
                     lines = []
                     for k, v in parsed.items():
                         if isinstance(v, str):
@@ -97,6 +189,7 @@ def flatten_content(content_blocks):
                     )
             except Exception:
                 parts.append(f"**[TOOL RESULT ← {name}]**\n{fence(raw)}")
+
     return "\n".join(parts)
 
 
@@ -139,7 +232,10 @@ def extract_steps_text(steps):
     return "\n\n".join(p for p in text_parts if p), stats_list
 
 
-def extract(path, show_transcript=True, show_stats=True):
+# ── Core extract ──────────────────────────────────────────────────────────────
+
+
+def extract(path, show_transcript=True, show_stats=True, out_file=None):
     with open(path) as f:
         d = json.load(f)
 
@@ -150,19 +246,19 @@ def extract(path, show_transcript=True, show_stats=True):
     )
     sys_prompt = d.get("systemPrompt", "").strip()
 
-    header_lines = [
+    lines = [
         f"# {d.get('name', '(unnamed)')}",
-        f"Created: {ts(d['createdAt'])}",
-        f"Tokens: {d.get('tokenCount', '?'):,}",
-        f"Model: {last_model.get('identifier', '?')} (final ctx: {final_ctx})",
+        f"File:    {Path(path).name}",
+        f"Created: {fmt_ts(d.get('createdAt'))}",
+        f"Tokens:  {d.get('tokenCount', '?'):,}",
+        f"Model:   {last_model.get('identifier', '?')} (ctx: {final_ctx})",
         f"Plugins: {', '.join(d.get('plugins', []))}",
     ]
     if sys_prompt:
-        header_lines.append(
+        lines.append(
             f"SysPrompt: {sys_prompt[:120]}{'...' if len(sys_prompt) > 120 else ''}"
         )
-    print("  \n".join(header_lines))
-    print()
+    lines.append("")
 
     messages = d.get("messages", [])
     all_stats = []
@@ -176,74 +272,107 @@ def extract(path, show_transcript=True, show_stats=True):
         vtype = ver.get("type", "")
 
         if show_transcript:
-            print(f"\n---\n")
-            print(f"**[{i + 1}] {role}**\n")
+            lines.append("\n---\n")
+            lines.append(f"**[{i + 1}] {role}**\n")
 
         if vtype == "singleStep":
             text = flatten_content(ver.get("content", []))
             if show_transcript:
-                print(text)
+                lines.append(text)
 
         elif vtype == "multiStep":
             steps = ver.get("steps", [])
             text, stats = extract_steps_text(steps)
             if show_transcript:
-                print(text)
+                lines.append(text)
             for s in stats:
                 s["msg_idx"] = i + 1
                 all_stats.append(s)
 
         if show_transcript:
-            print()
+            lines.append("")
 
     if show_stats and all_stats:
-        print(f"\n## Performance Stats\n")
-        print("| Msg | tok/s | TTFT(s) | total(s) | prompt | gen | ctx | stop |")
-        print("|----:|------:|--------:|---------:|-------:|----:|----:|------|")
+        lines.append("\n## Performance Stats\n")
+        lines.append("| Msg | tok/s | TTFT(s) | total(s) | prompt | gen | ctx | stop |")
+        lines.append("|----:|------:|--------:|---------:|-------:|----:|----:|------|")
         for s in all_stats:
-            tps = (
-                f"{s['tokensPerSecond']:.1f}"
-                if s["tokensPerSecond"] is not None
-                else "?"
-            )
-            ttft = (
-                f"{s['timeToFirstTokenSec']:.3f}"
-                if s["timeToFirstTokenSec"] is not None
-                else "?"
-            )
+            tps = f"{s['tokensPerSecond']:.1f}" if s["tokensPerSecond"] is not None else "?"
+            ttft = f"{s['timeToFirstTokenSec']:.3f}" if s["timeToFirstTokenSec"] is not None else "?"
             tot = f"{s['totalTimeSec']:.2f}" if s["totalTimeSec"] is not None else "?"
-            print(
+            lines.append(
                 f"| {s['msg_idx']} | {tps} | {ttft} | {tot} "
                 f"| {s['promptTokens'] or 0:,} | {s['predictedTokens'] or 0:,} "
                 f"| {s['contextLength'] or 0:,} | {s['stopReason'] or ''} |"
             )
 
         tps_vals = [s["tokensPerSecond"] for s in all_stats if s["tokensPerSecond"]]
-        ttft_vals = [
-            s["timeToFirstTokenSec"] for s in all_stats if s["timeToFirstTokenSec"]
-        ]
+        ttft_vals = [s["timeToFirstTokenSec"] for s in all_stats if s["timeToFirstTokenSec"]]
         gen_vals = [s["predictedTokens"] for s in all_stats if s["predictedTokens"]]
 
-        print()
+        lines.append("")
         if tps_vals:
-            print(
-                f"**tok/s** min={min(tps_vals):.1f} max={max(tps_vals):.1f} avg={sum(tps_vals) / len(tps_vals):.1f}  "
+            lines.append(
+                f"**tok/s** min={min(tps_vals):.1f} max={max(tps_vals):.1f} avg={sum(tps_vals)/len(tps_vals):.1f}  "
             )
         if ttft_vals:
-            print(
-                f"**TTFT**  min={min(ttft_vals):.2f}s max={max(ttft_vals):.2f}s avg={sum(ttft_vals) / len(ttft_vals):.2f}s  "
+            lines.append(
+                f"**TTFT**  min={min(ttft_vals):.2f}s max={max(ttft_vals):.2f}s avg={sum(ttft_vals)/len(ttft_vals):.2f}s  "
             )
         if gen_vals:
-            print(
-                f"**Gen**   total={sum(gen_vals):,} tokens  avg={sum(gen_vals) / len(gen_vals):.0f}/step  "
+            lines.append(
+                f"**Gen**   total={sum(gen_vals):,} tokens  avg={sum(gen_vals)/len(gen_vals):.0f}/step  "
             )
 
+    output = "\n".join(lines)
+    if out_file:
+        Path(out_file).write_text(output, encoding="utf-8")
+        print(f"Written to {out_file}")
+    else:
+        print(output)
+
+
+# ── List conversations ────────────────────────────────────────────────────────
+
+
+def list_conversations(conv_dir_override=None):
+    conv_dir = get_conversations_dir(conv_dir_override)
+    files = all_conversation_files(conv_dir)
+
+    if not files:
+        print("No conversations found.")
+        return
+
+    print(f"{'Filename stem':<17}  {'Created':<20}  {'Tokens':>8}  {'Model':<40}  Name")
+    print("-" * 115)
+    for f in files:
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            name = (d.get("name") or "(unnamed)")[:45]
+            created = fmt_ts(d.get("createdAt"))
+            tokens = d.get("tokenCount")
+            tok_s = f"{tokens:,}" if tokens else "-"
+            model = (d.get("lastUsedModel", {}).get("identifier") or "-")[:40]
+            print(f"{stem(f):<17}  {created:<20}  {tok_s:>8}  {model:<40}  {name}")
+        except Exception as e:
+            print(f"{stem(f):<17}  (error reading file: {e})")
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(
         description="Extract LM Studio session transcript and stats"
     )
-    ap.add_argument("file", nargs="?", help="Path to LM Studio .json log")
+
+    src = ap.add_mutually_exclusive_group()
+    src.add_argument(
+        "file",
+        nargs="?",
+        help="Path to .conversation.json, or a unique substring of the filename stem",
+    )
+    src.add_argument("--list", action="store_true", help="List all conversations")
+
     ap.add_argument(
         "--stats-only", action="store_true", help="Stats only, no transcript"
     )
@@ -251,19 +380,28 @@ if __name__ == "__main__":
         "--transcript-only", action="store_true", help="Transcript only, no stats table"
     )
     ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
-    args = ap.parse_args()
+    ap.add_argument(
+        "--conversations-dir",
+        metavar="DIR",
+        help="Override conversations directory (also via LMSTUDIO_CONVERSATIONS env var)",
+    )
 
-    if not args.file:
+    if len(sys.argv) == 1:
         ap.print_help()
         sys.exit(0)
 
+    args = ap.parse_args()
+
     show_t = not args.stats_only
     show_s = not args.transcript_only
+    cdir = args.conversations_dir
 
-    if args.out:
-        sys.stdout = open(args.out, "w")
+    if args.list:
+        list_conversations(cdir)
 
-    extract(args.file, show_transcript=show_t, show_stats=show_s)
+    elif args.file:
+        path = resolve_file(args.file, cdir)
+        extract(path, show_transcript=show_t, show_stats=show_s, out_file=args.out)
 
-    if args.out:
-        sys.stdout.close()
+    else:
+        ap.print_help()
