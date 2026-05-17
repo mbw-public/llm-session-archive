@@ -16,6 +16,7 @@ has been retired, or the service has gone offline.
 | [Goose](https://github.com/block/goose) | SQLite (`sessions.db`) or JSON export | `goose_extract.py` |
 | [Claude Code](https://claude.ai/code) | JSONL session log (`.jsonl`) | `claudecode_extract.py` |
 | [LM Studio](https://lmstudio.ai) | JSON conversation file (`.json`) | `lmstudio_extract.py` |
+| [Jan](https://jan.ai) | JSONL thread log (`messages.jsonl`) | `jan_extract.py` |
 
 `split_session.py` is a utility for splitting large session transcripts into
 smaller chunks — useful when a markdown previewer struggles with multi-megabyte
@@ -32,7 +33,9 @@ formats that are:
 - **Transient** — lost if the tool is updated, the model retired, or the
   service shut down
 
-This toolkit gives you plain markdown that you own  — permanently, can search with `grep` or `rg`, and open in any text editor or markdown previewer.
+This toolkit gives you plain markdown that you own — permanently readable,
+searchable with `grep` or `rg`, and openable in any text editor or markdown
+previewer.
 
 ## Requirements
 
@@ -42,7 +45,7 @@ This toolkit gives you plain markdown that you own  — permanently, can search 
 ## Installation
 
 ```bash
-git clone https://github.com/Monty/llm-session-archive.git
+git clone https://github.com/mbw-public/llm-session-archive.git
 cd llm-session-archive
 chmod +x *.py
 ```
@@ -55,12 +58,12 @@ chmod +x *.py
 # List sessions in the default database
 ./goose_extract.py --list
 
-# Extract a session
+# Extract a session by ID
 ./goose_extract.py 20260503_1 > session.md
 
 # Extract with long tool results collapsed into <details> blocks
 ./goose_extract.py 20260503_1 --collapse-results > session.md
-./goose_extract.py 20260503_1 --collapse-results 40 > session.md
+./goose_extract.py 20260503_1 --collapse-results=40 > session.md
 
 # Export all sessions to a directory
 ./goose_extract.py --all --out-dir ./transcripts/
@@ -82,21 +85,27 @@ Override with `--db FILE` or the `GOOSE_DB` environment variable.
 ### Claude Code
 
 ```bash
-# Full transcript + token stats
-./claudecode_extract.py Claude.jsonl > session.md
+# List all sessions across all projects
+./claudecode_extract.py --list
+
+# Extract a session by UUID (or unique substring)
+./claudecode_extract.py 70e31d > session.md
 
 # Include extended thinking blocks
-./claudecode_extract.py Claude.jsonl --show-thinking > session.md
+./claudecode_extract.py 70e31d --show-thinking > session.md
 
 # Collapse tool results longer than N lines (default N=20)
-./claudecode_extract.py Claude.jsonl --collapse-results > session.md
-./claudecode_extract.py Claude.jsonl --collapse-results 40 > session.md
+./claudecode_extract.py 70e31d --collapse-results > session.md
+./claudecode_extract.py 70e31d --collapse-results=40 > session.md
 
 # Stats only — token counts, cache hits, stop reasons per turn
-./claudecode_extract.py Claude.jsonl --stats-only
+./claudecode_extract.py 70e31d --stats-only
 
 # Transcript only, no stats table
-./claudecode_extract.py Claude.jsonl --transcript-only > session.md
+./claudecode_extract.py 70e31d --transcript-only > session.md
+
+# Write directly to a file
+./claudecode_extract.py 70e31d --out session.md
 ```
 
 The stats section shows per-turn input/output tokens, prompt cache reads and
@@ -104,7 +113,8 @@ writes, and stop reasons — useful for understanding where tokens are being spe
 across a long session.
 
 Claude Code session logs are stored in `~/.claude/projects/<project-path>/`
-as `.jsonl` files, one per session.
+as `.jsonl` files, one per session. Override with `--projects-dir DIR` or the
+`CLAUDE_PROJECTS` environment variable.
 
 ### LM Studio
 
@@ -116,19 +126,60 @@ before extracting:
 # Strip redundant predictionConfig blocks (saves 50–80% on large files)
 ./lmstudio_strip.py Qwen.json > Qwen_stripped.json
 
-# Extract transcript + performance stats
+# List all conversations
+./lmstudio_extract.py --list
+
+# Extract by filename stem (or unique substring)
+./lmstudio_extract.py 1777912439851 > session.md
 ./lmstudio_extract.py Qwen_stripped.json > session.md
 
+# Collapse tool results longer than N lines (default N=20)
+./lmstudio_extract.py 1777912439851 --collapse-results > session.md
+./lmstudio_extract.py 1777912439851 --collapse-results=40 > session.md
+
 # Stats only — tok/s, time-to-first-token, context length per turn
-./lmstudio_extract.py Qwen_stripped.json --stats-only
+./lmstudio_extract.py 1777912439851 --stats-only
 
 # Transcript only
-./lmstudio_extract.py Qwen_stripped.json --transcript-only > session.md
+./lmstudio_extract.py 1777912439851 --transcript-only > session.md
 ```
 
 The stats section shows tokens/second, time-to-first-token, total generation
 time, prompt and generated token counts, and context length — useful for
 benchmarking local model performance.
+
+Conversations are stored in `~/.lmstudio/conversations/`. Override with
+`--conversations-dir DIR` or the `LMSTUDIO_CONVERSATIONS` environment variable.
+
+### Jan
+
+```bash
+# List all threads
+./jan_extract.py --list
+
+# Extract a thread by UUID (or unique substring)
+./jan_extract.py 63e1 > session.md
+
+# Include reasoning/thinking blocks
+./jan_extract.py 63e1 --show-thinking > session.md
+
+# Stats only
+./jan_extract.py 63e1 --stats-only
+
+# Transcript only
+./jan_extract.py 63e1 --transcript-only > session.md
+
+# Write directly to a file
+./jan_extract.py 63e1 --out session.md
+
+# Export all threads to a directory
+./jan_extract.py --all --out-dir ./jan_transcripts/
+```
+
+Jan threads are stored in `~/Library/Application Support/Jan/data/threads/`
+(macOS) as UUID-named directories, each containing `thread.json` and
+`messages.jsonl`. Override with `--threads-dir DIR` or the `JAN_THREADS`
+environment variable.
 
 ### Splitting large files
 
@@ -147,35 +198,19 @@ Output files are named by actual turn numbers, e.g.
 
 Each transcript includes:
 
-- **Session header** — tool, model, provider, timestamps, working directory,
-  token totals
+- **Session header** — tool, model, timestamps, working directory, token totals
 - **Full transcript** — user and assistant turns numbered sequentially with
   role headers
 - **Thinking blocks** — collapsible `<details>` sections for extended reasoning
-  (Goose and Claude Code with `--show-thinking`)
+  (Goose, Claude Code, and Jan with `--show-thinking`)
 - **Tool calls and results** — formatted with fenced code blocks; long results
-  optionally collapsed with `--collapse-results N` (Goose)
-- **Stats section** — token usage (Claude Code) or performance metrics such as
-  tokens/second and time-to-first-token (LM Studio)
+  optionally collapsed with `--collapse-results` (Goose, Claude Code, LM Studio)
+- **Stats section** — token usage per turn (Claude Code, Jan) or performance
+  metrics such as tokens/second and time-to-first-token (LM Studio), or tool
+  call breakdown (Goose)
 
 Transcripts render correctly in [Marked 2](https://marked2app.com),
-[MacDown](https://macdown.uranusjr.com), [Obsidian](https://obsidian.md), and
-any CommonMark-compatible renderer.
-
-## Sharing sessions across machines
-
-To work with sessions from another machine, copy the database file and point
-`--db` at it:
-
-```bash
-# Compress for transfer (SQLite compresses well — typically 10:1)
-zip sessions.db.zip sessions.db
-
-# On the receiving machine
-./goose_extract.py --db ./sessions.db --list
-./goose_extract.py --db ./sessions.db 20260503_1 > session.md
-./goose_extract.py --db ./sessions.db --all --out-dir ./transcripts/
-```
+[Obsidian](https://obsidian.md), and any CommonMark-compatible renderer.
 
 ## License
 
