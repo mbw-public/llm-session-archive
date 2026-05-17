@@ -64,15 +64,22 @@ def get_threads_dir(override=None):
 def list_thread_dirs(threads_dir):
     """Return newest-first list of thread directories that have both required files."""
     result = [
-        d for d in threads_dir.iterdir()
-        if d.is_dir() and (d / "thread.json").exists() and (d / "messages.jsonl").exists()
+        d
+        for d in threads_dir.iterdir()
+        if d.is_dir()
+        and (d / "thread.json").exists()
+        and (d / "messages.jsonl").exists()
     ]
+
     # Sort by thread.json "created" timestamp descending
     def created_ts(d):
         try:
-            return json.loads((d / "thread.json").read_text(encoding="utf-8")).get("created", 0)
+            return json.loads((d / "thread.json").read_text(encoding="utf-8")).get(
+                "created", 0
+            )
         except Exception:
             return 0
+
     return sorted(result, key=created_ts, reverse=True)
 
 
@@ -191,7 +198,9 @@ def load_thread(thread_dir):
     thread_meta = json.loads((thread_dir / "thread.json").read_text(encoding="utf-8"))
 
     messages = []
-    for line in (thread_dir / "messages.jsonl").read_text(encoding="utf-8").splitlines():
+    for line in (
+        (thread_dir / "messages.jsonl").read_text(encoding="utf-8").splitlines()
+    ):
         line = line.strip()
         if not line:
             continue
@@ -251,7 +260,9 @@ def extract(
     assistant = (thread_meta.get("assistants") or [{}])[0]
     model_info = assistant.get("model", {})
     model_id = model_info.get("id") or thread_meta.get("model", {}).get("id", "")
-    engine = model_info.get("engine") or thread_meta.get("model", {}).get("provider", "")
+    engine = model_info.get("engine") or thread_meta.get("model", {}).get(
+        "provider", ""
+    )
 
     lines += [
         f"# {title}",
@@ -339,7 +350,9 @@ def extract(
 def thread_token_total(thread_dir):
     """Sum totalTokens across all assistant messages in a thread."""
     total = 0
-    for line in (thread_dir / "messages.jsonl").read_text(encoding="utf-8").splitlines():
+    for line in (
+        (thread_dir / "messages.jsonl").read_text(encoding="utf-8").splitlines()
+    ):
         line = line.strip()
         if not line:
             continue
@@ -448,7 +461,9 @@ if __name__ == "__main__":
         "--stats-only", action="store_true", help="Stats only, no transcript"
     )
     ap.add_argument(
-        "--transcript-only", action="store_true", help="Transcript only, no stats tables"
+        "--transcript-only",
+        action="store_true",
+        help="Transcript only, no stats tables",
     )
     ap.add_argument(
         "--show-thinking",

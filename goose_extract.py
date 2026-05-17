@@ -613,10 +613,14 @@ def list_sessions(n=None, db_path=None):
         if mc_json:
             try:
                 mc = json.loads(mc_json)
-                model = mc.get("model_id") or mc.get("model_name") or mc.get("model") or "-"
+                model = (
+                    mc.get("model_id") or mc.get("model_name") or mc.get("model") or "-"
+                )
             except Exception:
                 pass
-        print(f"{sid:<20}  {fmt_ts(created):<20}  {tok_s:>8}  {model[:45]:<45}  {label}")
+        print(
+            f"{sid:<20}  {fmt_ts(created):<20}  {tok_s:>8}  {model[:45]:<45}  {label}"
+        )
 
 
 # ── Schema dump ───────────────────────────────────────────────────────────────

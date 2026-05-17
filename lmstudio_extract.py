@@ -139,9 +139,7 @@ def render_tool_result(name, raw, collapse_results=None):
             unescaped = unescape_text(parsed)
             result_str = (unescaped or "").replace("\n\n", "\n")
             result_str = (
-                result_str.replace("\\n", "\n")
-                .replace("\\t", "\t")
-                .replace('\\"', '"')
+                result_str.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
             )
             result_str = result_str.replace("\n\n", "\n")
             lang = ""
@@ -254,7 +252,9 @@ def extract_steps_text(steps, collapse_results=None):
 # ── Core extract ──────────────────────────────────────────────────────────────
 
 
-def extract(path, show_transcript=True, show_stats=True, collapse_results=None, out_file=None):
+def extract(
+    path, show_transcript=True, show_stats=True, collapse_results=None, out_file=None
+):
     with open(path) as f:
         d = json.load(f)
 
@@ -318,8 +318,16 @@ def extract(path, show_transcript=True, show_stats=True, collapse_results=None, 
         lines.append("| Msg | tok/s | TTFT(s) | total(s) | prompt | gen | ctx | stop |")
         lines.append("|----:|------:|--------:|---------:|-------:|----:|----:|------|")
         for s in all_stats:
-            tps = f"{s['tokensPerSecond']:.1f}" if s["tokensPerSecond"] is not None else "?"
-            ttft = f"{s['timeToFirstTokenSec']:.3f}" if s["timeToFirstTokenSec"] is not None else "?"
+            tps = (
+                f"{s['tokensPerSecond']:.1f}"
+                if s["tokensPerSecond"] is not None
+                else "?"
+            )
+            ttft = (
+                f"{s['timeToFirstTokenSec']:.3f}"
+                if s["timeToFirstTokenSec"] is not None
+                else "?"
+            )
             tot = f"{s['totalTimeSec']:.2f}" if s["totalTimeSec"] is not None else "?"
             lines.append(
                 f"| {s['msg_idx']} | {tps} | {ttft} | {tot} "
@@ -328,21 +336,23 @@ def extract(path, show_transcript=True, show_stats=True, collapse_results=None, 
             )
 
         tps_vals = [s["tokensPerSecond"] for s in all_stats if s["tokensPerSecond"]]
-        ttft_vals = [s["timeToFirstTokenSec"] for s in all_stats if s["timeToFirstTokenSec"]]
+        ttft_vals = [
+            s["timeToFirstTokenSec"] for s in all_stats if s["timeToFirstTokenSec"]
+        ]
         gen_vals = [s["predictedTokens"] for s in all_stats if s["predictedTokens"]]
 
         lines.append("")
         if tps_vals:
             lines.append(
-                f"**tok/s** min={min(tps_vals):.1f} max={max(tps_vals):.1f} avg={sum(tps_vals)/len(tps_vals):.1f}  "
+                f"**tok/s** min={min(tps_vals):.1f} max={max(tps_vals):.1f} avg={sum(tps_vals) / len(tps_vals):.1f}  "
             )
         if ttft_vals:
             lines.append(
-                f"**TTFT**  min={min(ttft_vals):.2f}s max={max(ttft_vals):.2f}s avg={sum(ttft_vals)/len(ttft_vals):.2f}s  "
+                f"**TTFT**  min={min(ttft_vals):.2f}s max={max(ttft_vals):.2f}s avg={sum(ttft_vals) / len(ttft_vals):.2f}s  "
             )
         if gen_vals:
             lines.append(
-                f"**Gen**   total={sum(gen_vals):,} tokens  avg={sum(gen_vals)/len(gen_vals):.0f}/step  "
+                f"**Gen**   total={sum(gen_vals):,} tokens  avg={sum(gen_vals) / len(gen_vals):.0f}/step  "
             )
 
     output = "\n".join(lines)

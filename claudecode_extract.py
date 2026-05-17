@@ -251,7 +251,9 @@ def scan_session(jsonl_path):
         if rtype == "assistant":
             if not model:
                 model = r.get("message", {}).get("model")
-            total_output += r.get("message", {}).get("usage", {}).get("output_tokens", 0)
+            total_output += (
+                r.get("message", {}).get("usage", {}).get("output_tokens", 0)
+            )
 
     return {
         "session_id": jsonl_path.stem,
@@ -427,7 +429,9 @@ def list_sessions(projects_dir_override=None):
 
     sessions = [scan_session(f) for f in files]
 
-    print(f"{'Session ID':<36}  {'Created':<20}  {'Tokens':>8}  {'Model':<35}  {'Project':<30}  Name")
+    print(
+        f"{'Session ID':<36}  {'Created':<20}  {'Tokens':>8}  {'Model':<35}  {'Project':<30}  Name"
+    )
     print("-" * 145)
     for s in sessions:
         tok_s = f"{s['output_tokens']:,}" if s["output_tokens"] else "-"
