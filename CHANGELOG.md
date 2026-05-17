@@ -4,6 +4,21 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-16  README overhaul
+
+- Jan added to supported tools table and given its own full usage section
+- Claude Code section rewritten to use `--list` and UUID substring matching
+  instead of explicit file paths
+- LM Studio section updated with `--list` and `--collapse-results`
+- All `--collapse-results 40` examples corrected to `--collapse-results=40`
+- Output format section updated to reflect all four tools accurately
+- MacDown removed from renderer list
+- "Sharing sessions across machines" section removed (not relevant for
+  typical users)
+- GitHub URL corrected to `https://github.com/mbw-public/llm-session-archive.git`
+
+---
+
 ## 2026-05-16  lmstudio_extract.py: add --collapse-results
 
 **`lmstudio_extract.py`**
