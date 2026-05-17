@@ -176,10 +176,17 @@ def render_tool_result(name, raw, collapse_results=None):
     fenced = fence(result_str, lang)
     n_lines = result_str.count("\n") + 1
     if collapse_results is not None and n_lines > collapse_results:
+        preview_lines = [ln for ln in result_str.splitlines() if ln.strip()][:3]
+        preview = "\n".join(preview_lines)
+        if n_lines > 3:
+            preview += "\n\u2026"
+        preview_fenced = fence(preview, lang)
+        safe_fenced = fence(close_unclosed_fences(result_str), lang)
         summary = f"**[TOOL RESULT \u2190 {name}]**  *({n_lines} lines)*"
         return (
-            f"{summary}\n\n<details><summary>Show all {n_lines} lines\u2026</summary>"
-            f"\n\n{fenced}\n\n</details>"
+            f"{summary}\n\n{preview_fenced}\n\n"
+            f"<details><summary>Show all {n_lines} lines\u2026</summary>"
+            f"\n\n{safe_fenced}\n\n</details>"
         )
     return f"**[TOOL RESULT \u2190 {name}]**\n{fenced}"
 

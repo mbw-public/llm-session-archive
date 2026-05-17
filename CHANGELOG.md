@@ -4,6 +4,32 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-17  Add 3-line preview to collapsed tool results
+
+**`lmstudio_extract.py`** and **`claudecode_extract.py`**
+
+Collapsed tool result blocks (via `--collapse-results`) now show a 3-line
+preview above the `<details>` element, skipping blank lines so the preview
+is always meaningful. This matches the existing behaviour in `goose_extract.py`
+and lets you see what's inside without having to click to expand.
+
+Format is now consistent across all three extractors:
+
+    **[TOOL RESULT ← name]**  (N lines)
+
+    ```
+    first meaningful line
+    second line
+    third line
+    …
+    ```
+
+    <details><summary>Show all N lines…</summary>
+    ...
+    </details>
+
+---
+
 ## 2026-05-16  README overhaul
 
 - Jan added to supported tools table and given its own full usage section

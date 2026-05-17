@@ -176,7 +176,7 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
                 text = block.get("thinking", "").strip()
                 if text:
                     parts.append(
-                        f"<details><summary>💭 Thinking</summary>\n\n{fence(text)}\n\n</details>"
+                        f"<details><summary>\U0001f4ad Thinking</summary>\n\n{fence(text)}\n\n</details>"
                     )
 
         elif t == "text":
@@ -190,7 +190,7 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
         elif t == "tool_use":
             name = block.get("name", "?")
             params = json.dumps(block.get("input", {}), indent=2)
-            parts.append(f"**[TOOL CALL → {name}]**\n{fence(params, 'json')}")
+            parts.append(f"**[TOOL CALL \u2192 {name}]**\n{fence(params, 'json')}")
 
         elif t == "tool_result":
             name = block.get("name", "?")
@@ -199,17 +199,22 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
                 texts = [i.get("text", "") for i in raw if i.get("type") == "text"]
                 raw = "\n".join(texts)
             raw = raw.replace("\n\n", "\n")
-            fenced = fence(raw)
             n_lines = raw.count("\n") + 1
             if collapse_results is not None and n_lines > collapse_results:
-                label = f"TOOL RESULT ← {name}"
-                summary = f"**[{label}]**  *({n_lines} lines)*"
+                preview_lines = [ln for ln in raw.splitlines() if ln.strip()][:3]
+                preview = "\n".join(preview_lines)
+                if n_lines > 3:
+                    preview += "\n\u2026"
+                preview_fenced = fence(preview)
+                safe_fenced = fence(close_unclosed_fences(raw))
+                summary = f"**[TOOL RESULT \u2190 {name}]**  *({n_lines} lines)*"
                 parts.append(
-                    f"{summary}\n\n<details><summary>Show all {n_lines} lines\u2026</summary>"
-                    f"\n\n{fenced}\n\n</details>"
+                    f"{summary}\n\n{preview_fenced}\n\n"
+                    f"<details><summary>Show all {n_lines} lines\u2026</summary>"
+                    f"\n\n{safe_fenced}\n\n</details>"
                 )
             else:
-                parts.append(f"**[TOOL RESULT ← {name}]**\n{fenced}")
+                parts.append(f"**[TOOL RESULT \u2190 {name}]**\n{fence(raw)}")
 
     return "\n\n".join(p for p in parts if p)
 
@@ -384,7 +389,7 @@ def extract(
             "## Token Usage Per Turn",
             "",
             "| Turn | Timestamp | Input | Output | CacheR | CacheW | Stop |",
-            "|-----:|-----------|------:|-------:|-------:|-------:|------|"
+            "|-----:|-----------|------:|-------:|-------:|-------:|------|",
         ]
         for u in per_turn_usage:
             t = fmt_ts(u["timestamp"])
