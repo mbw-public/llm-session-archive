@@ -7,6 +7,8 @@ Usage:
     python3 lmstudio_extract.py <file>
     python3 lmstudio_extract.py <file> --stats-only
     python3 lmstudio_extract.py <file> --transcript-only
+    python3 lmstudio_extract.py <file> --collapse-results
+    python3 lmstudio_extract.py <file> --collapse-results=40
     python3 lmstudio_extract.py <file> --out session.md
 
 <file> is a path to a .conversation.json file, or a unique prefix/substring
@@ -75,7 +77,6 @@ def resolve_file(arg, conv_dir=None):
     if p.exists():
         return p
 
-    # Try matching against conversations directory
     try:
         cdir = get_conversations_dir(conv_dir)
     except FileNotFoundError:
@@ -130,7 +131,60 @@ def unescape_text(content_blocks):
     return "\n".join(parts) if parts else None
 
 
-def flatten_content(content_blocks):
+def render_tool_result(name, raw, collapse_results=None):
+    """Render a toolCallResult block, with optional collapsing."""
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            unescaped = unescape_text(parsed)
+            result_str = (unescaped or "").replace("\n\n", "\n")
+            result_str = (
+                result_str.replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace('\\"', '"')
+            )
+            result_str = result_str.replace("\n\n", "\n")
+            lang = ""
+            if result_str.startswith("#!"):
+                first_line = result_str.splitlines()[0]
+                if "bash" in first_line or "sh" in first_line:
+                    lang = "bash"
+                elif "python" in first_line:
+                    lang = "python"
+        elif isinstance(parsed, dict):
+            dict_lines = []
+            for k, v in parsed.items():
+                if isinstance(v, str):
+                    v = v.replace("\n\n", "\n").rstrip()
+                    if "\n" in v:
+                        dict_lines.append(f"{k}: |")
+                        for vline in v.splitlines():
+                            dict_lines.append(f"  {vline}")
+                    else:
+                        dict_lines.append(f"{k}: {v}")
+                else:
+                    dict_lines.append(f"{k}: {json.dumps(v)}")
+            result_str = "\n".join(dict_lines)
+            lang = ""
+        else:
+            result_str = json.dumps(parsed, indent=2)
+            lang = "json"
+    except Exception:
+        result_str = raw
+        lang = ""
+
+    fenced = fence(result_str, lang)
+    n_lines = result_str.count("\n") + 1
+    if collapse_results is not None and n_lines > collapse_results:
+        summary = f"**[TOOL RESULT \u2190 {name}]**  *({n_lines} lines)*"
+        return (
+            f"{summary}\n\n<details><summary>Show all {n_lines} lines\u2026</summary>"
+            f"\n\n{fenced}\n\n</details>"
+        )
+    return f"**[TOOL RESULT \u2190 {name}]**\n{fenced}"
+
+
+def flatten_content(content_blocks, collapse_results=None):
     """Render a content block array to markdown."""
     parts = []
     for block in content_blocks:
@@ -141,59 +195,17 @@ def flatten_content(content_blocks):
         elif t == "toolCallRequest":
             name = block.get("name", "?")
             params = json.dumps(block.get("parameters", {}), indent=2)
-            parts.append(f"**[TOOL CALL → {name}]**\n{fence(params, 'json')}")
+            parts.append(f"**[TOOL CALL \u2192 {name}]**\n{fence(params, 'json')}")
 
         elif t == "toolCallResult":
             name = block.get("name", "?")
             raw = block.get("content", "")
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, list):
-                    unescaped = unescape_text(parsed)
-                    result_str = (unescaped or "").replace("\n\n", "\n")
-                    result_str = (
-                        result_str.replace("\\n", "\n")
-                        .replace("\\t", "\t")
-                        .replace('\\"', '"')
-                    )
-                    result_str = result_str.replace("\n\n", "\n")
-                    lang = ""
-                    if result_str.startswith("#!"):
-                        first_line = result_str.splitlines()[0]
-                        if "bash" in first_line or "sh" in first_line:
-                            lang = "bash"
-                        elif "python" in first_line:
-                            lang = "python"
-                    parts.append(
-                        f"**[TOOL RESULT ← {name}]**\n{fence(result_str, lang)}"
-                    )
-                elif isinstance(parsed, dict):
-                    lines = []
-                    for k, v in parsed.items():
-                        if isinstance(v, str):
-                            v = v.replace("\n\n", "\n").rstrip()
-                            if "\n" in v:
-                                lines.append(f"{k}: |")
-                                for vline in v.splitlines():
-                                    lines.append(f"  {vline}")
-                            else:
-                                lines.append(f"{k}: {v}")
-                        else:
-                            lines.append(f"{k}: {json.dumps(v)}")
-                    result_str = "\n".join(lines)
-                    parts.append(f"**[TOOL RESULT ← {name}]**\n{fence(result_str)}")
-                else:
-                    result_str = json.dumps(parsed, indent=2)
-                    parts.append(
-                        f"**[TOOL RESULT ← {name}]**\n{fence(result_str, 'json')}"
-                    )
-            except Exception:
-                parts.append(f"**[TOOL RESULT ← {name}]**\n{fence(raw)}")
+            parts.append(render_tool_result(name, raw, collapse_results))
 
     return "\n".join(parts)
 
 
-def extract_steps_text(steps):
+def extract_steps_text(steps, collapse_results=None):
     """Walk all steps in a multiStep version, return (text, stats_list)."""
     text_parts = []
     stats_list = []
@@ -202,7 +214,7 @@ def extract_steps_text(steps):
         stype = step.get("type", "")
         if stype == "contentBlock":
             content = step.get("content", [])
-            text_parts.append(flatten_content(content))
+            text_parts.append(flatten_content(content, collapse_results))
 
             gi = step.get("genInfo", {})
             s = gi.get("stats")
@@ -235,7 +247,7 @@ def extract_steps_text(steps):
 # ── Core extract ──────────────────────────────────────────────────────────────
 
 
-def extract(path, show_transcript=True, show_stats=True, out_file=None):
+def extract(path, show_transcript=True, show_stats=True, collapse_results=None, out_file=None):
     with open(path) as f:
         d = json.load(f)
 
@@ -258,6 +270,8 @@ def extract(path, show_transcript=True, show_stats=True, out_file=None):
         lines.append(
             f"SysPrompt: {sys_prompt[:120]}{'...' if len(sys_prompt) > 120 else ''}"
         )
+    if collapse_results is not None:
+        lines.append(f"Collapse threshold: tool results > {collapse_results} lines")
     lines.append("")
 
     messages = d.get("messages", [])
@@ -276,13 +290,13 @@ def extract(path, show_transcript=True, show_stats=True, out_file=None):
             lines.append(f"**[{i + 1}] {role}**\n")
 
         if vtype == "singleStep":
-            text = flatten_content(ver.get("content", []))
+            text = flatten_content(ver.get("content", []), collapse_results)
             if show_transcript:
                 lines.append(text)
 
         elif vtype == "multiStep":
             steps = ver.get("steps", [])
-            text, stats = extract_steps_text(steps)
+            text, stats = extract_steps_text(steps, collapse_results)
             if show_transcript:
                 lines.append(text)
             for s in stats:
@@ -385,6 +399,15 @@ if __name__ == "__main__":
         metavar="DIR",
         help="Override conversations directory (also via LMSTUDIO_CONVERSATIONS env var)",
     )
+    ap.add_argument(
+        "--collapse-results",
+        metavar="N",
+        type=int,
+        nargs="?",
+        const=20,
+        default=None,
+        help="Wrap tool result blocks longer than N lines in <details> (default N=20)",
+    )
 
     if len(sys.argv) == 1:
         ap.print_help()
@@ -401,7 +424,13 @@ if __name__ == "__main__":
 
     elif args.file:
         path = resolve_file(args.file, cdir)
-        extract(path, show_transcript=show_t, show_stats=show_s, out_file=args.out)
+        extract(
+            path,
+            show_transcript=show_t,
+            show_stats=show_s,
+            collapse_results=args.collapse_results,
+            out_file=args.out,
+        )
 
     else:
         ap.print_help()
