@@ -120,7 +120,8 @@ as `.jsonl` files, one per session. Override with `--projects-dir DIR` or the
 
 LM Studio conversation files can be large due to a `predictionConfig` block
 repeated inside every `genInfo` step. Strip these first to reduce file size
-before extracting:
+before archiving — `lmstudio_extract.py` produces identical output from
+stripped or unstripped files:
 
 ```bash
 # Strip redundant predictionConfig blocks (saves 50–80% on large files)
