@@ -314,7 +314,7 @@ def extract(
                 tok_rows.append((i + 1, msg["role"], out_tok, speed))
 
         if tok_rows:
-            lines.append("\n## Token Usage Per Message\n")
+            lines.append("\n## Token Usage Per Turn\n")
             lines.append("| Msg | Role | Tokens | tok/s |")
             lines.append("|----:|------|-------:|------:|")
             for idx, role, tok, speed in tok_rows:
@@ -360,7 +360,7 @@ def list_threads(threads_dir_override=None):
         print("No threads found.")
         return
 
-    print(f"{'Thread ID':<40}  {'Created':<20}  {'Tokens':>8}  {'Model':<35}  Title")
+    print(f"{'Thread ID':<40}  {'Created':<20}  {'Tokens':>8}  {'Model':<35}  Name")
     print("-" * 120)
     for d in dirs:
         meta = json.loads((d / "thread.json").read_text(encoding="utf-8"))
