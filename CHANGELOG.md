@@ -4,6 +4,59 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-16  lmstudio_extract.py: add --collapse-results
+
+**`lmstudio_extract.py`**
+
+`--collapse-results[=N]` added (default N=20): wraps `toolCallResult` blocks
+longer than N lines in a `<details>` element, consistent with the other
+extractors. Tool result rendering refactored into `render_tool_result()` so
+collapse logic is applied uniformly across list, dict, and raw string results.
+
+---
+
+## 2026-05-16  Standardize stats heading and --list column names
+
+**`jan_extract.py`**
+- Stats heading renamed from `## Token Usage Per Message` to
+  `## Token Usage Per Turn` (consistent with `claudecode_extract.py`;
+  "per turn" is the standard LLM community term)
+- `--list` column heading `Title` renamed to `Name` (consistent with
+  all other extractors)
+
+**`claudecode_extract.py`**
+- `--list` column headings `Started` → `Created` and `Title` → `Name`
+  (consistent with all other extractors)
+
+---
+
+## 2026-05-16  claudecode_extract.py: add --list, rewrite CLI
+
+**`claudecode_extract.py`**
+
+- `--list` added: shows all sessions across all projects under
+  `~/.claude/projects/`, newest-first, with session UUID, started time,
+  output token total, model, project (last 2 cwd path components), and
+  the AI-generated session title from the `ai-title` record
+- `--projects-dir DIR` / `CLAUDE_PROJECTS` env var to override default
+- `session` positional now accepts a unique substring of the UUID in
+  addition to an explicit path
+- `--out FILE` now uses `Path.write_text()` instead of replacing
+  `sys.stdout` (was fragile)
+- Prints full `--help` when run with no arguments
+- Fixed missing `import re` (caused `NameError` in `remove_empty_fences`)
+- Thinking blocks now rendered in `<details>` with 💭 summary, consistent
+  with `goose_extract.py` and `jan_extract.py`
+- Session header uses `ai-title` as the `#` heading when available
+- `file` positional renamed to `session` for clarity
+- Stats section rewritten as a markdown table (`## Token Usage Per Turn`)
+  with bold totals underneath, consistent with `goose_extract.py`,
+  `jan_extract.py`, and `lmstudio_extract.py`
+- `Started` column heading renamed to `Created` in `--list` output
+- `Title` column heading renamed to `Name` in `--list` output
+
+---
+
 ## 2026-05-16  goose_extract.py: show model in --list
 
 **`goose_extract.py`**
