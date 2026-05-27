@@ -7,11 +7,13 @@ Supports two input formats:
     python3 goose_extract.py --list
     python3 goose_extract.py --schema
     python3 goose_extract.py <session_id>
+    python3 goose_extract.py <session_id> --show-thinking
     python3 goose_extract.py <session_id> --stats-only
     python3 goose_extract.py <session_id> --transcript-only
     python3 goose_extract.py <session_id> --out session.md
     python3 goose_extract.py <session_id> --collapse-results 20
     python3 goose_extract.py --all --out-dir ./goose_transcripts/
+    python3 goose_extract.py --all -n 10 --out-dir ./goose_transcripts/
 
   JSON export file:
     python3 goose_extract.py --json session.json
@@ -228,7 +230,7 @@ def close_unclosed_fences(content):
     return content
 
 
-def render_blocks(blocks, collapse_results=None):
+def render_blocks(blocks, collapse_results=None, show_thinking=False):
     """
     Render a pre-parsed list of content blocks to markdown.
 
@@ -322,13 +324,14 @@ def render_blocks(blocks, collapse_results=None):
                 parts.append(f"**[{label} ← {tool_id}]**\n{fenced}")
 
         elif btype == "thinking":
-            thinking = block.get("thinking", "").strip()
-            if thinking:
-                thinking = strip_fences_from_thinking(thinking)
-                thinking = close_unclosed_fences(thinking)
-                parts.append(
-                    f"<details><summary>💭 Thinking</summary>\n\n{thinking}\n\n</details>"
-                )
+            if show_thinking:
+                thinking = block.get("thinking", "").strip()
+                if thinking:
+                    thinking = strip_fences_from_thinking(thinking)
+                    thinking = close_unclosed_fences(thinking)
+                    parts.append(
+                        f"<details><summary>💭 Thinking</summary>\n\n{thinking}\n\n</details>"
+                    )
 
         else:
             parts.append(
@@ -338,7 +341,7 @@ def render_blocks(blocks, collapse_results=None):
     return "\n\n".join(p for p in parts if p)
 
 
-def render_content(raw, collapse_results=None):
+def render_content(raw, collapse_results=None, show_thinking=False):
     """
     Render message content to markdown.
     Accepts either a JSON string (from SQLite) or a pre-parsed list (from JSON export).
@@ -346,12 +349,18 @@ def render_content(raw, collapse_results=None):
     if not raw:
         return ""
     if isinstance(raw, list):
-        return render_blocks(raw, collapse_results=collapse_results)
+        return render_blocks(
+            raw, collapse_results=collapse_results, show_thinking=show_thinking
+        )
     if isinstance(raw, str) and raw.strip().startswith(("[", "{")):
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, list):
-                return render_blocks(parsed, collapse_results=collapse_results)
+                return render_blocks(
+                    parsed,
+                    collapse_results=collapse_results,
+                    show_thinking=show_thinking,
+                )
             if isinstance(parsed, str):
                 return parsed.strip()
         except json.JSONDecodeError:
@@ -462,6 +471,7 @@ def extract(
     session,
     messages,
     show_transcript=True,
+    show_thinking=False,
     show_stats=True,
     out_file=None,
     collapse_results=None,
@@ -518,7 +528,9 @@ def extract(
         for i, msg in enumerate(messages):
             role = msg.get("role", "?").upper()
             raw = msg.get("content_json") or msg.get("content") or ""
-            rendered = render_content(raw, collapse_results=collapse_results)
+            rendered = render_content(
+                raw, collapse_results=collapse_results, show_thinking=show_thinking
+            )
             tok = msg.get("tokens")
 
             lines.append("\n---\n")
@@ -565,6 +577,7 @@ def extract(
 def extract_from_db(
     session_id,
     show_transcript=True,
+    show_thinking=False,
     show_stats=True,
     out_file=None,
     collapse_results=None,
@@ -575,18 +588,35 @@ def extract_from_db(
         session, messages = load_session_from_db(con, session_id)
     finally:
         con.close()
-    extract(session, messages, show_transcript, show_stats, out_file, collapse_results)
+    extract(
+        session,
+        messages,
+        show_transcript,
+        show_thinking,
+        show_stats,
+        out_file,
+        collapse_results,
+    )
 
 
 def extract_from_json(
     json_path,
     show_transcript=True,
+    show_thinking=False,
     show_stats=True,
     out_file=None,
     collapse_results=None,
 ):
     session, messages = load_session_from_json(json_path)
-    extract(session, messages, show_transcript, show_stats, out_file, collapse_results)
+    extract(
+        session,
+        messages,
+        show_transcript,
+        show_thinking,
+        show_stats,
+        out_file,
+        collapse_results,
+    )
 
 
 # ── List sessions ─────────────────────────────────────────────────────────────
@@ -603,10 +633,13 @@ def list_sessions(n=None, db_path=None):
     rows = cur.fetchall()
     con.close()
 
-    print(f"{'Session ID':<20}  {'Created':<20}  {'Tokens':>8}  {'Model':<45}  Name")
-    print("-" * 115)
+    def trunc(s, n):
+        return s if len(s) <= n else s[: n - 1] + "\u2026"
+
+    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  Name")
+    print("-" * 108)
     for sid, name, desc, created, acc_tok, tok, provider, mc_json in rows:
-        label = (name or desc or "(unnamed)")[:45]
+        label = trunc(name or desc or "(unnamed)", 28)
         tokens = acc_tok or tok
         tok_s = f"{tokens:,}" if tokens else "-"
         model = "-"
@@ -619,7 +652,7 @@ def list_sessions(n=None, db_path=None):
             except Exception:
                 pass
         print(
-            f"{sid:<20}  {fmt_ts(created):<20}  {tok_s:>8}  {model[:45]:<45}  {label}"
+            f"{sid[:17]:<17}  {fmt_ts(created):<20}  {tok_s:>10}  {trunc(model, 25):<25}  {label}"
         )
 
 
@@ -669,13 +702,22 @@ def show_schema(db_path=None):
 
 
 def export_all(
-    out_dir, transcript=True, stats=True, collapse_results=None, db_path=None
+    out_dir,
+    transcript=True,
+    show_thinking=False,
+    stats=True,
+    collapse_results=None,
+    db_path=None,
+    n=None,
 ):
     con = connect(db_path)
     cur = con.cursor()
     cur.execute("SELECT id FROM sessions ORDER BY created_at ASC")
     ids = [r[0] for r in cur.fetchall()]
     con.close()
+
+    if n:
+        ids = ids[-n:]  # most recent N, preserving chronological order
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -686,6 +728,7 @@ def export_all(
             extract_from_db(
                 sid,
                 show_transcript=transcript,
+                show_thinking=show_thinking,
                 show_stats=stats,
                 out_file=str(dest),
                 collapse_results=collapse_results,
@@ -693,32 +736,26 @@ def export_all(
             )
         except Exception as e:
             print(f"    ERROR: {e}")
-    print(f"\nDone. {len(ids)} sessions exported to {out}/")
+    label = f"{len(ids)} most recent" if n else str(len(ids))
+    print(f"\nDone. {label} sessions exported to {out}/")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(
-        description="Extract Goose conversation transcripts and stats"
+        description="Extract Goose session transcripts and stats"
     )
     src = ap.add_mutually_exclusive_group()
     src.add_argument(
-        "session_id", nargs="?", help="Session ID from sessions.db (e.g. 20260503_1)"
+        "session_id",
+        nargs="?",
+        help="Session ID or unique substring — run --list to see them",
     )
-    src.add_argument("--json", metavar="FILE", help="Goose JSON export file")
-    src.add_argument(
-        "--list", action="store_true", help="List all sessions in sessions.db"
+    src.add_argument("--list", action="store_true", help="List all sessions")
+    ap.add_argument(
+        "-n", type=int, help="Limit --list or --all to N most recent sessions"
     )
-    src.add_argument(
-        "--schema",
-        action="store_true",
-        help="Show DB schema + sample content block structure",
-    )
-    src.add_argument(
-        "--all", action="store_true", help="Export all sessions from sessions.db"
-    )
-
     ap.add_argument(
         "--stats-only", action="store_true", help="Stats only, no transcript"
     )
@@ -728,13 +765,10 @@ if __name__ == "__main__":
         help="Transcript only, no stats tables",
     )
     ap.add_argument(
-        "--db",
-        metavar="FILE",
-        help="Path to sessions.db (overrides default location and GOOSE_DB env var)",
+        "--show-thinking",
+        action="store_true",
+        help="Include thinking blocks in transcript",
     )
-    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
-    ap.add_argument("--out-dir", metavar="DIR", help="Output directory for --all")
-    ap.add_argument("-n", type=int, help="Limit --list to N most recent sessions")
     ap.add_argument(
         "--collapse-results",
         metavar="N",
@@ -743,6 +777,24 @@ if __name__ == "__main__":
         const=20,
         default=None,
         help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+    )
+    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
+    src.add_argument(
+        "--all",
+        action="store_true",
+        help="Export all sessions (combine with -n to limit)",
+    )
+    ap.add_argument("--out-dir", metavar="DIR", help="Output directory for --all")
+    src.add_argument(
+        "--schema",
+        action="store_true",
+        help="Show DB schema + sample content block structure",
+    )
+    src.add_argument("--json", metavar="FILE", help="Goose JSON export file")
+    ap.add_argument(
+        "--db",
+        metavar="FILE",
+        help="Override default sessions.db location (also via GOOSE_DB env var)",
     )
     args = ap.parse_args()
 
@@ -760,14 +812,17 @@ if __name__ == "__main__":
         export_all(
             args.out_dir or "./goose_transcripts",
             transcript=show_t,
+            show_thinking=args.show_thinking,
             stats=show_s,
             collapse_results=collapse,
             db_path=db,
+            n=args.n,
         )
     elif args.json:
         extract_from_json(
             args.json,
             show_transcript=show_t,
+            show_thinking=args.show_thinking,
             show_stats=show_s,
             out_file=args.out,
             collapse_results=collapse,
@@ -776,6 +831,7 @@ if __name__ == "__main__":
         extract_from_db(
             args.session_id,
             show_transcript=show_t,
+            show_thinking=args.show_thinking,
             show_stats=show_s,
             out_file=args.out,
             collapse_results=collapse,

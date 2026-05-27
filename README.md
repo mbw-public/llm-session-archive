@@ -55,17 +55,22 @@ chmod +x *.py
 ### Goose
 
 ```bash
-# List sessions in the default database
+# List sessions
 ./goose_extract.py --list
+./goose_extract.py --list -n 10
 
 # Extract a session by ID
 ./goose_extract.py 20260503_1 > session.md
+
+# Include thinking blocks
+./goose_extract.py 20260503_1 --show-thinking > session.md
 
 # Extract with long tool results collapsed into <details> blocks
 ./goose_extract.py 20260503_1 --collapse-results > session.md
 ./goose_extract.py 20260503_1 --collapse-results=40 > session.md
 
-# Export all sessions to a directory
+# Export most recent N sessions to a directory
+./goose_extract.py --all -n 10 --out-dir ./transcripts/
 ./goose_extract.py --all --out-dir ./transcripts/
 
 # Work with a database copied from another machine
@@ -87,11 +92,12 @@ Override with `--db FILE` or the `GOOSE_DB` environment variable.
 ```bash
 # List all sessions across all projects
 ./claudecode_extract.py --list
+./claudecode_extract.py --list -n 10
 
 # Extract a session by UUID (or unique substring)
 ./claudecode_extract.py 70e31d > session.md
 
-# Include extended thinking blocks
+# Include thinking blocks
 ./claudecode_extract.py 70e31d --show-thinking > session.md
 
 # Collapse tool results longer than N lines (default N=20)
@@ -106,6 +112,10 @@ Override with `--db FILE` or the `GOOSE_DB` environment variable.
 
 # Write directly to a file
 ./claudecode_extract.py 70e31d --out session.md
+
+# Export most recent N sessions to a directory
+./claudecode_extract.py --all -n 10 --out-dir ./claude_transcripts/
+./claudecode_extract.py --all --out-dir ./claude_transcripts/
 ```
 
 The stats section shows per-turn input/output tokens, prompt cache reads and
@@ -118,21 +128,16 @@ as `.jsonl` files, one per session. Override with `--projects-dir DIR` or the
 
 ### LM Studio
 
-LM Studio conversation files can be large due to a `predictionConfig` block
-repeated inside every `genInfo` step. Strip these first to reduce file size
-before archiving — `lmstudio_extract.py` produces identical output from
-stripped or unstripped files:
-
 ```bash
-# Strip redundant predictionConfig blocks (saves 50–80% on large files)
-./lmstudio_strip.py Qwen.json > Qwen_stripped.json
-
 # List all conversations
 ./lmstudio_extract.py --list
+./lmstudio_extract.py --list -n 10
 
 # Extract by filename stem (or unique substring)
 ./lmstudio_extract.py 1777912439851 > session.md
-./lmstudio_extract.py Qwen_stripped.json > session.md
+
+# Include thinking blocks (Qwen3 and other reasoning models)
+./lmstudio_extract.py 1777912439851 --show-thinking > session.md
 
 # Collapse tool results longer than N lines (default N=20)
 ./lmstudio_extract.py 1777912439851 --collapse-results > session.md
@@ -143,6 +148,10 @@ stripped or unstripped files:
 
 # Transcript only
 ./lmstudio_extract.py 1777912439851 --transcript-only > session.md
+
+# Export most recent N conversations to a directory
+./lmstudio_extract.py --all -n 10 --out-dir ./lmstudio_transcripts/
+./lmstudio_extract.py --all --out-dir ./lmstudio_transcripts/
 ```
 
 The stats section shows tokens/second, time-to-first-token, total generation
@@ -155,13 +164,14 @@ Conversations are stored in `~/.lmstudio/conversations/`. Override with
 ### Jan
 
 ```bash
-# List all threads
+# List all sessions
 ./jan_extract.py --list
+./jan_extract.py --list -n 10
 
-# Extract a thread by UUID (or unique substring)
+# Extract a session by UUID (or unique substring)
 ./jan_extract.py 63e1 > session.md
 
-# Include reasoning/thinking blocks
+# Include thinking blocks
 ./jan_extract.py 63e1 --show-thinking > session.md
 
 # Stats only
@@ -173,11 +183,12 @@ Conversations are stored in `~/.lmstudio/conversations/`. Override with
 # Write directly to a file
 ./jan_extract.py 63e1 --out session.md
 
-# Export all threads to a directory
+# Export most recent N sessions to a directory
+./jan_extract.py --all -n 10 --out-dir ./jan_transcripts/
 ./jan_extract.py --all --out-dir ./jan_transcripts/
 ```
 
-Jan threads are stored in `~/Library/Application Support/Jan/data/threads/`
+Jan sessions are stored in `~/Library/Application Support/Jan/data/threads/`
 (macOS) as UUID-named directories, each containing `thread.json` and
 `messages.jsonl`. Override with `--threads-dir DIR` or the `JAN_THREADS`
 environment variable.

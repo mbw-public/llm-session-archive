@@ -4,7 +4,11 @@ lmstudio_extract.py — Extract readable transcripts + stats from LM Studio conv
 
 Usage:
     python3 lmstudio_extract.py --list
+    python3 lmstudio_extract.py --list -n 5
+    python3 lmstudio_extract.py --all --out-dir ./lmstudio_transcripts/
+    python3 lmstudio_extract.py --all -n 10 --out-dir ./lmstudio_transcripts/
     python3 lmstudio_extract.py <file>
+    python3 lmstudio_extract.py <file> --show-thinking
     python3 lmstudio_extract.py <file> --stats-only
     python3 lmstudio_extract.py <file> --transcript-only
     python3 lmstudio_extract.py <file> --collapse-results
@@ -119,6 +123,32 @@ def fence(content, lang=""):
     return f"```{lang}\n{content}\n```"
 
 
+def close_unclosed_fences(text):
+    """Ensure every opened fenced code block is closed.
+
+    Scans for fence-opening lines (``` or ~~~, with optional lang tag) and
+    closes any block that is still open at the end of the string, so that
+    the text is safe to embed inside a <details> element without breaking
+    the surrounding Markdown renderer.
+    """
+    backtick_open = False
+    tilde_open = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            backtick_open = not backtick_open
+        elif stripped.startswith("~~~"):
+            tilde_open = not tilde_open
+    closers = []
+    if backtick_open:
+        closers.append("```")
+    if tilde_open:
+        closers.append("~~~")
+    if closers:
+        return text.rstrip() + "\n" + "\n".join(closers)
+    return text
+
+
 # ── Content rendering ─────────────────────────────────────────────────────────
 
 
@@ -190,27 +220,49 @@ def render_tool_result(name, raw, collapse_results=None):
 
 
 def flatten_content(content_blocks, collapse_results=None):
-    """Render a content block array to markdown."""
+    """Render a content block array to markdown.
+
+    LM Studio (newer versions with MTP/speculative decoding) stores each
+    generated token as its own {"type": "text", "text": "...", "tokensCount": 1}
+    object rather than as a single concatenated string.  Concatenating those
+    with "\n".join() and stripping each fragment individually breaks the text
+    (leading spaces are lost, line breaks appear at every token boundary).
+
+    Fix: buffer consecutive text blocks and join them with no separator,
+    preserving the whitespace each token already carries.  Only flush to
+    `parts` when a non-text block (tool call / result) interrupts the run,
+    or at end-of-input.
+    """
     parts = []
+    text_buf = []
+
+    def flush_text():
+        if text_buf:
+            parts.append("".join(text_buf).strip())
+            text_buf.clear()
+
     for block in content_blocks:
         t = block.get("type", "")
         if t == "text":
-            parts.append(block.get("text", "").strip())
+            text_buf.append(block.get("text", ""))
 
         elif t == "toolCallRequest":
+            flush_text()
             name = block.get("name", "?")
             params = json.dumps(block.get("parameters", {}), indent=2)
             parts.append(f"**[TOOL CALL \u2192 {name}]**\n{fence(params, 'json')}")
 
         elif t == "toolCallResult":
+            flush_text()
             name = block.get("name", "?")
             raw = block.get("content", "")
             parts.append(render_tool_result(name, raw, collapse_results))
 
-    return "\n".join(parts)
+    flush_text()
+    return "\n\n".join(p for p in parts if p)
 
 
-def extract_steps_text(steps, collapse_results=None):
+def extract_steps_text(steps, collapse_results=None, show_thinking=False):
     """Walk all steps in a multiStep version, return (text, stats_list)."""
     text_parts = []
     stats_list = []
@@ -218,33 +270,44 @@ def extract_steps_text(steps, collapse_results=None):
     for step in steps:
         stype = step.get("type", "")
         if stype == "contentBlock":
+            is_thinking = step.get("style", {}).get("type") == "thinking"
             content = step.get("content", [])
-            text_parts.append(flatten_content(content, collapse_results))
 
-            gi = step.get("genInfo", {})
-            s = gi.get("stats")
-            if s:
-                ctx = next(
-                    (
-                        f["value"]
-                        for f in gi.get("loadModelConfig", {}).get("fields", [])
-                        if f["key"] == "llm.load.contextLength"
-                    ),
-                    None,
-                )
-                stats_list.append(
-                    {
-                        "tokensPerSecond": s.get("tokensPerSecond"),
-                        "promptTokens": s.get("promptTokensCount"),
-                        "predictedTokens": s.get("predictedTokensCount"),
-                        "totalTokens": s.get("totalTokensCount"),
-                        "timeToFirstTokenSec": s.get("timeToFirstTokenSec"),
-                        "totalTimeSec": s.get("totalTimeSec"),
-                        "stopReason": s.get("stopReason"),
-                        "numGpuLayers": s.get("numGpuLayers"),
-                        "contextLength": ctx,
-                    }
-                )
+            if is_thinking:
+                if show_thinking:
+                    text = flatten_content(content, collapse_results).strip()
+                    if text:
+                        title = step.get("style", {}).get("title", "Thinking")
+                        text_parts.append(
+                            f"<details><summary>\U0001f4ad {title}</summary>\n\n{text}\n\n</details>"
+                        )
+            else:
+                text_parts.append(flatten_content(content, collapse_results))
+
+                gi = step.get("genInfo", {})
+                s = gi.get("stats")
+                if s:
+                    ctx = next(
+                        (
+                            f["value"]
+                            for f in gi.get("loadModelConfig", {}).get("fields", [])
+                            if f["key"] == "llm.load.contextLength"
+                        ),
+                        None,
+                    )
+                    stats_list.append(
+                        {
+                            "tokensPerSecond": s.get("tokensPerSecond"),
+                            "promptTokens": s.get("promptTokensCount"),
+                            "predictedTokens": s.get("predictedTokensCount"),
+                            "totalTokens": s.get("totalTokensCount"),
+                            "timeToFirstTokenSec": s.get("timeToFirstTokenSec"),
+                            "totalTimeSec": s.get("totalTimeSec"),
+                            "stopReason": s.get("stopReason"),
+                            "numGpuLayers": s.get("numGpuLayers"),
+                            "contextLength": ctx,
+                        }
+                    )
 
     return "\n\n".join(p for p in text_parts if p), stats_list
 
@@ -253,7 +316,12 @@ def extract_steps_text(steps, collapse_results=None):
 
 
 def extract(
-    path, show_transcript=True, show_stats=True, collapse_results=None, out_file=None
+    path,
+    show_transcript=True,
+    show_thinking=False,
+    show_stats=True,
+    collapse_results=None,
+    out_file=None,
 ):
     with open(path) as f:
         d = json.load(f)
@@ -303,7 +371,7 @@ def extract(
 
         elif vtype == "multiStep":
             steps = ver.get("steps", [])
-            text, stats = extract_steps_text(steps, collapse_results)
+            text, stats = extract_steps_text(steps, collapse_results, show_thinking)
             if show_transcript:
                 lines.append(text)
             for s in stats:
@@ -363,28 +431,72 @@ def extract(
         print(output)
 
 
+# ── Export all ────────────────────────────────────────────────────────────────
+
+
+def export_all(
+    out_dir,
+    transcript=True,
+    show_thinking=False,
+    stats=True,
+    collapse_results=None,
+    conv_dir_override=None,
+    n=None,
+):
+    conv_dir = get_conversations_dir(conv_dir_override)
+    files = all_conversation_files(conv_dir)  # newest-first
+    if n:
+        files = files[:n]
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    for f in files:
+        dest = out / f"{stem(f)}.md"
+        print(f"  {stem(f)} \u2192 {dest}")
+        try:
+            extract(
+                f,
+                show_transcript=transcript,
+                show_thinking=show_thinking,
+                show_stats=stats,
+                collapse_results=collapse_results,
+                out_file=str(dest),
+            )
+        except Exception as e:
+            print(f"    ERROR: {e}")
+
+    label = f"{len(files)} most recent" if n else str(len(files))
+    print(f"\nDone. {label} conversations exported to {out}/")
+
+
 # ── List conversations ────────────────────────────────────────────────────────
 
 
-def list_conversations(conv_dir_override=None):
+def list_conversations(n=None, conv_dir_override=None):
     conv_dir = get_conversations_dir(conv_dir_override)
     files = all_conversation_files(conv_dir)
+    if n:
+        files = files[:n]
 
     if not files:
         print("No conversations found.")
         return
 
-    print(f"{'Filename stem':<17}  {'Created':<20}  {'Tokens':>8}  {'Model':<40}  Name")
-    print("-" * 115)
+    def trunc(s, n):
+        return s if len(s) <= n else s[: n - 1] + "\u2026"
+
+    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  Name")
+    print("-" * 108)
     for f in files:
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            name = (d.get("name") or "(unnamed)")[:45]
+            name = trunc(d.get("name") or "(unnamed)", 28)
             created = fmt_ts(d.get("createdAt"))
             tokens = d.get("tokenCount")
             tok_s = f"{tokens:,}" if tokens else "-"
-            model = (d.get("lastUsedModel", {}).get("identifier") or "-")[:40]
-            print(f"{stem(f):<17}  {created:<20}  {tok_s:>8}  {model:<40}  {name}")
+            model = trunc(d.get("lastUsedModel", {}).get("identifier") or "-", 25)
+            print(f"{stem(f):<17}  {created:<20}  {tok_s:>10}  {model:<25}  {name}")
         except Exception as e:
             print(f"{stem(f):<17}  (error reading file: {e})")
 
@@ -393,28 +505,31 @@ def list_conversations(conv_dir_override=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(
-        description="Extract LM Studio session transcript and stats"
+        description="Extract LM Studio session transcripts and stats"
     )
 
     src = ap.add_mutually_exclusive_group()
     src.add_argument(
-        "file",
+        "session_id",
         nargs="?",
-        help="Path to .conversation.json, or a unique substring of the filename stem",
+        help="Session ID or unique substring — run --list to see them",
     )
-    src.add_argument("--list", action="store_true", help="List all conversations")
-
+    src.add_argument("--list", action="store_true", help="List all sessions")
+    ap.add_argument(
+        "-n", type=int, help="Limit --list or --all to N most recent sessions"
+    )
     ap.add_argument(
         "--stats-only", action="store_true", help="Stats only, no transcript"
     )
     ap.add_argument(
-        "--transcript-only", action="store_true", help="Transcript only, no stats table"
+        "--transcript-only",
+        action="store_true",
+        help="Transcript only, no stats tables",
     )
-    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
     ap.add_argument(
-        "--conversations-dir",
-        metavar="DIR",
-        help="Override conversations directory (also via LMSTUDIO_CONVERSATIONS env var)",
+        "--show-thinking",
+        action="store_true",
+        help="Include thinking blocks in transcript",
     )
     ap.add_argument(
         "--collapse-results",
@@ -423,7 +538,19 @@ if __name__ == "__main__":
         nargs="?",
         const=20,
         default=None,
-        help="Wrap tool result blocks longer than N lines in <details> (default N=20)",
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+    )
+    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
+    src.add_argument(
+        "--all",
+        action="store_true",
+        help="Export all sessions (combine with -n to limit)",
+    )
+    ap.add_argument("--out-dir", metavar="DIR", help="Output directory for --all")
+    ap.add_argument(
+        "--conversations-dir",
+        metavar="DIR",
+        help="Override conversations directory (also via LMSTUDIO_CONVERSATIONS env var)",
     )
 
     if len(sys.argv) == 1:
@@ -437,13 +564,25 @@ if __name__ == "__main__":
     cdir = args.conversations_dir
 
     if args.list:
-        list_conversations(cdir)
+        list_conversations(n=args.n, conv_dir_override=cdir)
 
-    elif args.file:
-        path = resolve_file(args.file, cdir)
+    elif args.all:
+        export_all(
+            args.out_dir or "./lmstudio_transcripts",
+            transcript=show_t,
+            show_thinking=args.show_thinking,
+            stats=show_s,
+            collapse_results=args.collapse_results,
+            conv_dir_override=cdir,
+            n=args.n,
+        )
+
+    elif args.session_id:
+        path = resolve_file(args.session_id, cdir)
         extract(
             path,
             show_transcript=show_t,
+            show_thinking=args.show_thinking,
             show_stats=show_s,
             collapse_results=args.collapse_results,
             out_file=args.out,

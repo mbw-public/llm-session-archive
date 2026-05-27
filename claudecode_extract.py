@@ -4,15 +4,18 @@ claudecode_extract.py — Extract readable transcripts + stats from Claude Code 
 
 Usage:
     python3 claudecode_extract.py --list
-    python3 claudecode_extract.py <session>
-    python3 claudecode_extract.py <session> --show-thinking
-    python3 claudecode_extract.py <session> --stats-only
-    python3 claudecode_extract.py <session> --transcript-only
-    python3 claudecode_extract.py <session> --collapse-results
-    python3 claudecode_extract.py <session> --collapse-results=40
-    python3 claudecode_extract.py <session> --out session.md
+    python3 claudecode_extract.py --list -n 5
+    python3 claudecode_extract.py --all --out-dir ./claude_transcripts/
+    python3 claudecode_extract.py --all -n 10 --out-dir ./claude_transcripts/
+    python3 claudecode_extract.py <session_id>
+    python3 claudecode_extract.py <session_id> --show-thinking
+    python3 claudecode_extract.py <session_id> --stats-only
+    python3 claudecode_extract.py <session_id> --transcript-only
+    python3 claudecode_extract.py <session_id> --collapse-results
+    python3 claudecode_extract.py <session_id> --collapse-results=40
+    python3 claudecode_extract.py <session_id> --out session.md
 
-<session> is a path to a .jsonl file, or a unique substring of the session UUID.
+<session_id> is a unique substring of the session UUID.
 
 Claude Code stores sessions under:
   ~/.claude/projects/<encoded-project-path>/<uuid>.jsonl
@@ -113,8 +116,10 @@ def fmt_ts(iso):
     if not iso:
         return "?"
     try:
-        return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime(
-            "%Y-%m-%d %H:%M:%S"
+        return (
+            datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            .astimezone()
+            .strftime("%Y-%m-%d %H:%M:%S")
         )
     except Exception:
         return str(iso)
@@ -416,12 +421,53 @@ def extract(
         print(output)
 
 
+# ── Export all ──────────────────────────────────────────────────────────────────
+
+
+def export_all(
+    out_dir,
+    transcript=True,
+    show_thinking=False,
+    stats=True,
+    collapse_results=None,
+    projects_dir_override=None,
+    n=None,
+):
+    projects_dir = get_projects_dir(projects_dir_override)
+    files = all_session_files(projects_dir)  # newest-first
+    if n:
+        files = files[:n]
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    for f in files:
+        dest = out / f"{f.stem}.md"
+        print(f"  {f.stem} \u2192 {dest}")
+        try:
+            extract(
+                f,
+                show_transcript=transcript,
+                show_thinking=show_thinking,
+                show_stats=stats,
+                collapse_results=collapse_results,
+                out_file=str(dest),
+            )
+        except Exception as e:
+            print(f"    ERROR: {e}")
+
+    label = f"{len(files)} most recent" if n else str(len(files))
+    print(f"\nDone. {label} sessions exported to {out}/")
+
+
 # ── List sessions ─────────────────────────────────────────────────────────────
 
 
-def list_sessions(projects_dir_override=None):
+def list_sessions(n=None, projects_dir_override=None):
     projects_dir = get_projects_dir(projects_dir_override)
     files = all_session_files(projects_dir)
+    if n:
+        files = files[:n]
 
     if not files:
         print("No sessions found.")
@@ -429,18 +475,21 @@ def list_sessions(projects_dir_override=None):
 
     sessions = [scan_session(f) for f in files]
 
+    def trunc(s, n):
+        return s if len(s) <= n else s[: n - 1] + "\u2026"
+
     print(
-        f"{'Session ID':<36}  {'Created':<20}  {'Tokens':>8}  {'Model':<35}  {'Project':<30}  Name"
+        f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  {'Name':<28}  Project"
     )
-    print("-" * 145)
+    print("-" * 130)
     for s in sessions:
         tok_s = f"{s['output_tokens']:,}" if s["output_tokens"] else "-"
-        project = short_project(s["cwd"])[:30]
-        model = s["model"][:35]
-        title = s["title"][:45]
+        project = trunc(short_project(s["cwd"]), 30)
+        model = trunc(s["model"], 25)
+        title = trunc(s["title"], 28)
         print(
-            f"{s['session_id']:<36}  {fmt_ts(s['started']):<20}  {tok_s:>8}  "
-            f"{model:<35}  {project:<30}  {title}"
+            f"{s['session_id'][:17]:<17}  {fmt_ts(s['started']):<20}  {tok_s:>10}  "
+            f"{model:<25}  {title:<28}  {project}"
         )
 
 
@@ -448,31 +497,31 @@ def list_sessions(projects_dir_override=None):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(
-        description="Extract Claude Code session transcript and stats"
+        description="Extract Claude Code session transcripts and stats"
     )
 
     src = ap.add_mutually_exclusive_group()
     src.add_argument(
-        "session",
+        "session_id",
         nargs="?",
-        help="Path to .jsonl file, or unique substring of session UUID — run --list to see them",
+        help="Session ID or unique substring — run --list to see them",
     )
     src.add_argument("--list", action="store_true", help="List all sessions")
-
     ap.add_argument(
-        "--show-thinking", action="store_true", help="Include extended thinking blocks"
+        "-n", type=int, help="Limit --list or --all to N most recent sessions"
     )
     ap.add_argument(
         "--stats-only", action="store_true", help="Stats only, no transcript"
     )
     ap.add_argument(
-        "--transcript-only", action="store_true", help="Transcript only, no stats table"
+        "--transcript-only",
+        action="store_true",
+        help="Transcript only, no stats tables",
     )
-    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
     ap.add_argument(
-        "--projects-dir",
-        metavar="DIR",
-        help="Override Claude Code projects directory (also via CLAUDE_PROJECTS env var)",
+        "--show-thinking",
+        action="store_true",
+        help="Include thinking blocks in transcript",
     )
     ap.add_argument(
         "--collapse-results",
@@ -482,6 +531,18 @@ if __name__ == "__main__":
         const=20,
         default=None,
         help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+    )
+    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
+    src.add_argument(
+        "--all",
+        action="store_true",
+        help="Export all sessions (combine with -n to limit)",
+    )
+    ap.add_argument("--out-dir", metavar="DIR", help="Output directory for --all")
+    ap.add_argument(
+        "--projects-dir",
+        metavar="DIR",
+        help="Override Claude Code projects directory (also via CLAUDE_PROJECTS env var)",
     )
 
     if len(sys.argv) == 1:
@@ -495,10 +556,21 @@ if __name__ == "__main__":
     pdir = args.projects_dir
 
     if args.list:
-        list_sessions(pdir)
+        list_sessions(n=args.n, projects_dir_override=pdir)
 
-    elif args.session:
-        path = resolve_session(args.session, pdir)
+    elif args.all:
+        export_all(
+            args.out_dir or "./claude_transcripts",
+            transcript=show_t,
+            show_thinking=args.show_thinking,
+            stats=show_s,
+            collapse_results=args.collapse_results,
+            projects_dir_override=pdir,
+            n=args.n,
+        )
+
+    elif args.session_id:
+        path = resolve_session(args.session_id, pdir)
         extract(
             path,
             show_transcript=show_t,

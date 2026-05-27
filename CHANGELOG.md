@@ -4,6 +4,212 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-26  Fix help text wording and line-break consistency in override/collapse options
+
+When scripts are run through a pipe (e.g. `fd ... | sh -c '{} -h'`), argparse
+loses tty detection and falls back to ~80-char terminal width, giving ~54 chars
+for help text. Strings were adjusted so all four `--*-dir` / `--db` overrides
+line-break consistently after `via`:
+
+- `--threads-dir`: "Override **default** Jan threads directory (also via
+  JAN_THREADS env var)" — "default" added to push `JAN_THREADS` onto the
+  next line
+- `--db` (goose): rewritten from the divergent "Path to sessions.db (overrides
+  default location and GOOSE_DB env var)" to "Override default sessions.db
+  location (also via GOOSE_DB env var)" — now matches the pattern of the
+  other three
+- `--collapse-results`: removed `; use --collapse-results=N to set threshold`
+  suffix — made the help line too long and the `=N` advice is already implied
+  by the metavar and docstring examples
+
+---
+
+## 2026-05-26  Refine option order and help text
+
+- `--show-thinking` moved before `--collapse-results` so all output-shaping
+  options are grouped together: `--stats-only`, `--transcript-only`,
+  `--show-thinking`, `--collapse-results`
+- `--collapse-results` help updated to note that `--collapse-results=N` is
+  the safe form when a session_id follows (with `nargs='?'`, a bare space-
+  separated value may be consumed as the positional argument)
+- `--all` help updated to `Export all sessions (combine with -n to limit)`,
+  since `-n` appears well above `--all` in the options list
+
+Applied identically to all four extractors.
+
+---
+
+## 2026-05-26  Standardise argparse option order and positional argument naming
+
+All four extractors now present options in the same order and use the same
+positional argument name:
+
+**Positional renamed to `session_id`** in lmstudio (was `file`) — help text
+updated to `Session ID or unique substring — run --list to see them` across
+all four. goose's positional help was also updated to match (previously
+`Session ID from sessions.db (e.g. 20260503_1)`).
+
+**Option order** now matches the canonical order from the pre-existing
+`*_help.txt` spec files, with `--show-thinking` slotted in after `--out-dir`
+(it wasn't in the spec files as they predate today's changes):
+
+```
+session_id (positional)
+--list
+-n
+--stats-only
+--transcript-only
+--collapse-results
+--out
+--all
+--out-dir
+--show-thinking
+<tool-specific>  (--projects-dir / --threads-dir / --conversations-dir)
+                 (goose only: --schema, --json, --db)
+```
+
+The `--list` / `--all` members of the mutually exclusive group are now added
+to the group at their intended positions in the help output rather than all
+upfront, taking advantage of argparse preserving insertion order.
+
+---
+
+## 2026-05-26  Tighten `--list` column widths; add truncation with `…`
+
+All four extractors now use identical column widths and a shared `trunc(s, n)`
+helper that appends `…` when a value is cut short:
+
+| Column     | Width | Notes |
+|------------|------:|-------|
+| Session ID | 17    | unchanged |
+| Created    | 20    | unchanged |
+| Tokens     | 10    | widened from 8 to fit `3,069,334` |
+| Model      | 25    | narrowed; `…` on overflow — distinguishable at 25 chars for all known model families |
+| Project    | 30    | claudecode only; unchanged |
+| Name       | 28    | sized to fit "Extraction Script Timestamps"; `…` on overflow |
+
+Name and Project column order swapped in claudecode so Name appears before
+Project (more useful at a glance; Project is trailing and unpadded).
+
+Separator lines: 108 chars (goose, jan, lmstudio); 130 chars (claudecode,
+which has the extra Project column).
+
+---
+
+## 2026-05-26  Standardise `--list` column headers and ID width to 17 chars
+
+All four extractors now show `Session ID` as the first column header and
+display at most 17 characters of the ID. This fits goose (`20260526_1`,
+10 chars) and lmstudio (13-char epoch) in full, and truncates claudecode/jan
+UUIDs to their first 17 characters — enough to be unique in any personal
+collection, and consistent with the substring-match behaviour both scripts
+already support. Separator line lengths updated accordingly.
+
+---
+
+## 2026-05-26  Add `--show-thinking` to `goose_extract.py`; add thinking support to `lmstudio_extract.py`
+
+**`goose_extract.py`** — thinking blocks were always rendered; now opt-in with
+`--show-thinking` for consistency with the other extractors. `show_thinking=False`
+propagates through `render_blocks()`, `render_content()`, `extract()`,
+`extract_from_db()`, `extract_from_json()`, and `export_all()`.
+
+**`lmstudio_extract.py`** — thinking support added. LM Studio stores Qwen3/thinking
+content as a `contentBlock` step with `style.type == "thinking"` and a
+`style.title` (e.g. "Thought for 1.14 seconds"). `extract_steps_text()` now
+checks this field: thinking steps are skipped by default and wrapped in
+`<details><summary>💭 {title}</summary>` when `--show-thinking` is active.
+Stats gathering (genInfo) is correctly skipped for thinking steps since they
+carry no `genInfo`.
+
+---
+
+## 2026-05-26  Standardise help text wording across all four extractors
+
+Six inconsistencies fixed:
+
+- **`--list`/`--all`/`-n`**: "threads" (jan) and "conversations" (lmstudio) → "sessions" everywhere; tool-specific terminology is already clear from the positional argument help
+- **Description**: "transcript" → "transcripts" in `claudecode_extract.py` and `lmstudio_extract.py`
+- **`--list`**: "List all sessions in sessions.db" → "List all sessions" in `goose_extract.py`
+- **`--all`**: "Export all sessions from sessions.db" → "Export all sessions" in `goose_extract.py`
+- **`--transcript-only`**: "no stats table" → "no stats tables" in `claudecode_extract.py` and `lmstudio_extract.py`
+- **`--collapse-results`**: "tool result blocks" → "TOOL RESULT blocks" in `jan_extract.py` and `lmstudio_extract.py`
+- **`--show-thinking`**: "Include extended thinking blocks" / "Include reasoning blocks in transcript" → "Include thinking blocks in transcript" in `claudecode_extract.py` and `jan_extract.py`
+
+---
+
+## 2026-05-26  Add `--all` to `claudecode_extract.py` and `lmstudio_extract.py`
+
+`--all --out-dir DIR` batch-exports all sessions/conversations to markdown files,
+consistent with `goose_extract.py` and `jan_extract.py` which already had this.
+`-n` applies to `--all` from the start, so `--all -n 10` is safe by default.
+
+Changed in each script:
+- `export_all()` added, following the same structure as the other two extractors
+- `--all` added to the mutually exclusive source group in argparse
+- `--out-dir DIR` added
+- `-n` help text updated to "Limit --list or --all to N most recent …"
+- `--all` and `--all -n 10` examples added to the module docstring
+- Default output directories: `./claude_transcripts/` and `./lmstudio_transcripts/`
+
+---
+
+## 2026-05-26  Add `-n` to `--all` in `goose_extract.py` and `jan_extract.py`
+
+`--all -n N` now exports only the N most recent sessions/threads instead of
+everything, making it safe to use without accidentally filling disk with
+hundreds of exports.
+
+`-n` already applied to `--list`; it now applies to `--all` as well.
+`--all` without `-n` is unchanged.
+
+Changed in each script:
+- `export_all()` gains `n=None`; slices the session/thread list to the most
+  recent N before iterating (goose: `ids[-n:]` since list is ASC;
+  jan: `dirs[:n]` since `list_thread_dirs()` is newest-first)
+- Done message says "N most recent" when n is set
+- `-n` help text updated from "Limit --list" to "Limit --list or --all"
+- `--all -n 10 --out-dir` example added to each module docstring
+
+---
+
+## 2026-05-26  Add `-n` to `--list` in `claudecode_extract.py`, `jan_extract.py`, `lmstudio_extract.py`
+
+`--list -n N` now limits output to the N most recent sessions/threads/conversations,
+consistent with `goose_extract.py` which already had this option.
+
+Changed in each script:
+- `list_*()` function gains an `n=None` parameter; slices the sorted file list
+  with `[:n]` before iterating
+- `-n N` argument added to argparse
+- `--list -n 5` example added to the module docstring Usage block
+
+---
+
+## 2026-05-25  Fix `--list` timestamps in `claudecode_extract.py` to local time
+
+**`claudecode_extract.py`**
+
+`fmt_ts()` now converts UTC timestamps to the system's local timezone before
+rendering. Previously, `datetime.fromisoformat()` returned a timezone-aware
+UTC datetime, but `.strftime()` was called on it without converting — so the
+UTC time was formatted as-is, displaying GMT times instead of PDT.
+
+Added `.astimezone()` between `fromisoformat()` and `strftime()`:
+
+```python
+# Before (UTC displayed as local)
+datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime(...)
+
+# After (converted to local first)
+datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone().strftime(...)
+```
+
+Now all four extractors (`claudecode`, `goose`, `jan`, `lmstudio`) display
+`--list` timestamps in the same local timezone.
+
+---
+
 ## 2026-05-17  Add 3-line preview to collapsed tool results
 
 **`lmstudio_extract.py`** and **`claudecode_extract.py`**

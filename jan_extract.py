@@ -4,14 +4,16 @@ jan_extract.py — Extract readable transcripts + stats from Jan app threads
 
 Usage:
     python3 jan_extract.py --list
-    python3 jan_extract.py <thread_id>
-    python3 jan_extract.py <thread_id> --stats-only
-    python3 jan_extract.py <thread_id> --transcript-only
-    python3 jan_extract.py <thread_id> --show-thinking
-    python3 jan_extract.py <thread_id> --collapse-results
-    python3 jan_extract.py <thread_id> --collapse-results=40
-    python3 jan_extract.py <thread_id> --out session.md
+    python3 jan_extract.py --list -n 5
+    python3 jan_extract.py <session_id>
+    python3 jan_extract.py <session_id> --stats-only
+    python3 jan_extract.py <session_id> --transcript-only
+    python3 jan_extract.py <session_id> --show-thinking
+    python3 jan_extract.py <session_id> --collapse-results
+    python3 jan_extract.py <session_id> --collapse-results=40
+    python3 jan_extract.py <session_id> --out session.md
     python3 jan_extract.py --all --out-dir ./jan_transcripts/
+    python3 jan_extract.py --all -n 10 --out-dir ./jan_transcripts/
 
 Thread IDs are UUIDs — run --list to see them with their titles.
 A unique prefix of the UUID is also accepted.
@@ -365,24 +367,29 @@ def thread_token_total(thread_dir):
     return total or None
 
 
-def list_threads(threads_dir_override=None):
+def list_threads(n=None, threads_dir_override=None):
     threads_dir = get_threads_dir(threads_dir_override)
     dirs = list_thread_dirs(threads_dir)
+    if n:
+        dirs = dirs[:n]
 
     if not dirs:
         print("No threads found.")
         return
 
-    print(f"{'Thread ID':<40}  {'Created':<20}  {'Tokens':>8}  {'Model':<35}  Name")
-    print("-" * 120)
+    def trunc(s, n):
+        return s if len(s) <= n else s[: n - 1] + "\u2026"
+
+    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  Name")
+    print("-" * 108)
     for d in dirs:
         meta = json.loads((d / "thread.json").read_text(encoding="utf-8"))
-        title = (meta.get("title") or "(untitled)")[:50]
+        title = trunc(meta.get("title") or "(untitled)", 28)
         created = fmt_ts(int(meta.get("created", 0) * 1000))
-        model_id = (meta.get("model", {}).get("id") or "-")[:35]
+        model_id = trunc(meta.get("model", {}).get("id") or "-", 25)
         tokens = thread_token_total(d)
         tok_s = f"{tokens:,}" if tokens else "-"
-        print(f"{d.name:<40}  {created:<20}  {tok_s:>8}  {model_id:<35}  {title}")
+        print(f"{d.name[:17]:<17}  {created:<20}  {tok_s:>10}  {model_id:<25}  {title}")
 
 
 # ── Export all ────────────────────────────────────────────────────────────────
@@ -395,9 +402,13 @@ def export_all(
     show_thinking=False,
     collapse_results=None,
     threads_dir_override=None,
+    n=None,
 ):
     threads_dir = get_threads_dir(threads_dir_override)
-    dirs = list_thread_dirs(threads_dir)
+    dirs = list_thread_dirs(threads_dir)  # newest-first
+
+    if n:
+        dirs = dirs[:n]  # most recent N
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -419,7 +430,8 @@ def export_all(
         except Exception as e:
             print(f"    ERROR: {e}")
 
-    print(f"\nDone. {len(dirs)} threads exported to {out}/")
+    label = f"{len(dirs)} most recent" if n else str(len(dirs))
+    print(f"\nDone. {label} threads exported to {out}/")
 
 
 # ── Thread resolver ───────────────────────────────────────────────────────────
@@ -450,13 +462,14 @@ if __name__ == "__main__":
 
     src = ap.add_mutually_exclusive_group()
     src.add_argument(
-        "thread_id",
+        "session_id",
         nargs="?",
-        help="Thread UUID (or unique prefix) — run --list to see them",
+        help="Session ID or unique substring — run --list to see them",
     )
-    src.add_argument("--list", action="store_true", help="List all threads")
-    src.add_argument("--all", action="store_true", help="Export all threads")
-
+    src.add_argument("--list", action="store_true", help="List all sessions")
+    ap.add_argument(
+        "-n", type=int, help="Limit --list or --all to N most recent sessions"
+    )
     ap.add_argument(
         "--stats-only", action="store_true", help="Stats only, no transcript"
     )
@@ -468,14 +481,7 @@ if __name__ == "__main__":
     ap.add_argument(
         "--show-thinking",
         action="store_true",
-        help="Include reasoning blocks in transcript",
-    )
-    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
-    ap.add_argument("--out-dir", metavar="DIR", help="Output directory for --all")
-    ap.add_argument(
-        "--threads-dir",
-        metavar="DIR",
-        help="Override Jan threads directory (also via JAN_THREADS env var)",
+        help="Include thinking blocks in transcript",
     )
     ap.add_argument(
         "--collapse-results",
@@ -484,7 +490,19 @@ if __name__ == "__main__":
         nargs="?",
         const=20,
         default=None,
-        help="Wrap tool result blocks longer than N lines in <details> (default N=20)",
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+    )
+    ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
+    src.add_argument(
+        "--all",
+        action="store_true",
+        help="Export all sessions (combine with -n to limit)",
+    )
+    ap.add_argument("--out-dir", metavar="DIR", help="Output directory for --all")
+    ap.add_argument(
+        "--threads-dir",
+        metavar="DIR",
+        help="Override default Jan threads directory (also via JAN_THREADS env var)",
     )
 
     if len(sys.argv) == 1:
@@ -499,7 +517,7 @@ if __name__ == "__main__":
     tdir = args.threads_dir
 
     if args.list:
-        list_threads(tdir)
+        list_threads(n=args.n, threads_dir_override=tdir)
 
     elif args.all:
         export_all(
@@ -509,11 +527,12 @@ if __name__ == "__main__":
             show_thinking=args.show_thinking,
             collapse_results=collapse,
             threads_dir_override=tdir,
+            n=args.n,
         )
 
-    elif args.thread_id:
+    elif args.session_id:
         threads_dir = get_threads_dir(tdir)
-        thread_dir = resolve_thread(args.thread_id, threads_dir)
+        thread_dir = resolve_thread(args.session_id, threads_dir)
         meta, messages = load_thread(thread_dir)
         extract(
             meta,
