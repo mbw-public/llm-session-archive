@@ -4,6 +4,16 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-30  Widen Model column to 39
+
+Model width increased from 25 to 39.  Models longer than 39 chars
+can be told apart by renaming the session. Plain right-truncation
+with `trunc()` is used; `trunc_mid()` was considered and rejected
+as visually distracting. Separator lines updated to 122 (goose,
+jan, lmstudio) and 144 (claudecode).
+
+---
+
 ## 2026-05-29  Add end-of-thinking marker inside thinking `<details>` blocks
 
 When a thinking block is expanded, its content blended visually into the

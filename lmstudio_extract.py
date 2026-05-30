@@ -486,8 +486,8 @@ def list_conversations(n=None, conv_dir_override=None):
     def trunc(s, n):
         return s if len(s) <= n else s[: n - 1] + "\u2026"
 
-    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  Name")
-    print("-" * 108)
+    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<39}  Name")
+    print("-" * 122)
     for f in files:
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
@@ -495,8 +495,8 @@ def list_conversations(n=None, conv_dir_override=None):
             created = fmt_ts(d.get("createdAt"))
             tokens = d.get("tokenCount")
             tok_s = f"{tokens:,}" if tokens else "-"
-            model = trunc(d.get("lastUsedModel", {}).get("identifier") or "-", 25)
-            print(f"{stem(f):<17}  {created:<20}  {tok_s:>10}  {model:<25}  {name}")
+            model = trunc(d.get("lastUsedModel", {}).get("identifier") or "-", 39)
+            print(f"{stem(f):<17}  {created:<20}  {tok_s:>10}  {model:<39}  {name}")
         except Exception as e:
             print(f"{stem(f):<17}  (error reading file: {e})")
 

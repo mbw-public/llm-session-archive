@@ -479,17 +479,17 @@ def list_sessions(n=None, projects_dir_override=None):
         return s if len(s) <= n else s[: n - 1] + "\u2026"
 
     print(
-        f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  {'Name':<28}  Project"
+        f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<39}  {'Name':<28}  Project"
     )
-    print("-" * 130)
+    print("-" * 144)
     for s in sessions:
         tok_s = f"{s['output_tokens']:,}" if s["output_tokens"] else "-"
         project = trunc(short_project(s["cwd"]), 30)
-        model = trunc(s["model"], 25)
+        model = trunc(s["model"], 39)
         title = trunc(s["title"], 28)
         print(
             f"{s['session_id'][:17]:<17}  {fmt_ts(s['started']):<20}  {tok_s:>10}  "
-            f"{model:<25}  {title:<28}  {project}"
+            f"{model:<39}  {title:<28}  {project}"
         )
 
 

@@ -380,16 +380,16 @@ def list_threads(n=None, threads_dir_override=None):
     def trunc(s, n):
         return s if len(s) <= n else s[: n - 1] + "\u2026"
 
-    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  Name")
-    print("-" * 108)
+    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<39}  Name")
+    print("-" * 122)
     for d in dirs:
         meta = json.loads((d / "thread.json").read_text(encoding="utf-8"))
         title = trunc(meta.get("title") or "(untitled)", 28)
         created = fmt_ts(int(meta.get("created", 0) * 1000))
-        model_id = trunc(meta.get("model", {}).get("id") or "-", 25)
+        model_id = trunc(meta.get("model", {}).get("id") or "-", 39)
         tokens = thread_token_total(d)
         tok_s = f"{tokens:,}" if tokens else "-"
-        print(f"{d.name[:17]:<17}  {created:<20}  {tok_s:>10}  {model_id:<25}  {title}")
+        print(f"{d.name[:17]:<17}  {created:<20}  {tok_s:>10}  {model_id:<39}  {title}")
 
 
 # ── Export all ────────────────────────────────────────────────────────────────

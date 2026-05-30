@@ -636,8 +636,8 @@ def list_sessions(n=None, db_path=None):
     def trunc(s, n):
         return s if len(s) <= n else s[: n - 1] + "\u2026"
 
-    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<25}  Name")
-    print("-" * 108)
+    print(f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<39}  Name")
+    print("-" * 122)
     for sid, name, desc, created, acc_tok, tok, provider, mc_json in rows:
         label = trunc(name or desc or "(unnamed)", 28)
         tokens = acc_tok or tok
@@ -652,7 +652,7 @@ def list_sessions(n=None, db_path=None):
             except Exception:
                 pass
         print(
-            f"{sid[:17]:<17}  {fmt_ts(created):<20}  {tok_s:>10}  {trunc(model, 25):<25}  {label}"
+            f"{sid[:17]:<17}  {fmt_ts(created):<20}  {tok_s:>10}  {trunc(model, 39):<39}  {label}"
         )
 
 
