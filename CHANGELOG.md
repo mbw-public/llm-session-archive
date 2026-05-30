@@ -4,6 +4,18 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-05-29  Add end-of-thinking marker inside thinking `<details>` blocks
+
+When a thinking block is expanded, its content blended visually into the
+assistant response that follows. Initially a `---` rule was added before
+`</details>`, but this produced a double hairline when the thinking block
+was the last element in a turn (the turn separator `---` already follows
+every `**[N] ROLE**` header). Replaced with `*— end thinking —*` in
+italics: clearly labelled, survives copy-paste as readable text, and cannot
+be confused with a turn separator. Applied to all four extractors.
+
+---
+
 ## 2026-05-26  Fix help text wording and line-break consistency in override/collapse options
 
 When scripts are run through a pipe (e.g. `fd ... | sh -c '{} -h'`), argparse

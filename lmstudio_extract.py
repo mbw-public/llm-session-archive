@@ -279,7 +279,7 @@ def extract_steps_text(steps, collapse_results=None, show_thinking=False):
                     if text:
                         title = step.get("style", {}).get("title", "Thinking")
                         text_parts.append(
-                            f"<details><summary>\U0001f4ad {title}</summary>\n\n{text}\n\n</details>"
+                            f"<details><summary>\U0001f4ad {title}</summary>\n\n{text}\n\n*\u2014 end thinking \u2014*\n\n</details>"
                         )
             else:
                 text_parts.append(flatten_content(content, collapse_results))

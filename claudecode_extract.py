@@ -181,7 +181,7 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
                 text = block.get("thinking", "").strip()
                 if text:
                     parts.append(
-                        f"<details><summary>\U0001f4ad Thinking</summary>\n\n{fence(text)}\n\n</details>"
+                        f"<details><summary>\U0001f4ad Thinking</summary>\n\n{fence(text)}\n\n*\u2014 end thinking \u2014*\n\n</details>"
                     )
 
         elif t == "text":

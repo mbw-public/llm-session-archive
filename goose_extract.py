@@ -330,7 +330,7 @@ def render_blocks(blocks, collapse_results=None, show_thinking=False):
                     thinking = strip_fences_from_thinking(thinking)
                     thinking = close_unclosed_fences(thinking)
                     parts.append(
-                        f"<details><summary>💭 Thinking</summary>\n\n{thinking}\n\n</details>"
+                        f"<details><summary>💭 Thinking</summary>\n\n{thinking}\n\n*\u2014 end thinking \u2014*\n\n</details>"
                     )
 
         else:

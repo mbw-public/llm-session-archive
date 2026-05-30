@@ -173,7 +173,7 @@ def render_message(msg, show_thinking=False, collapse_results=None):
             if show_thinking:
                 value = close_unclosed_fences(value)
                 parts.append(
-                    f"<details><summary>💭 Thinking</summary>\n\n{value}\n\n</details>"
+                    f"<details><summary>💭 Thinking</summary>\n\n{value}\n\n*\u2014 end thinking \u2014*\n\n</details>"
                 )
 
         else:
