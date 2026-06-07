@@ -167,7 +167,11 @@ def render_message(msg, show_thinking=False, collapse_results=None):
             input_data = block.get("input", {})
             output_data = block.get("output", [])
 
-            inp_s = json.dumps(input_data, indent=2) if isinstance(input_data, dict) else str(input_data)
+            inp_s = (
+                json.dumps(input_data, indent=2)
+                if isinstance(input_data, dict)
+                else str(input_data)
+            )
             parts.append(f"**[TOOL CALL \u2192 {tool_name}]**\n{fence(inp_s, 'json')}")
 
             if output_data:
@@ -179,7 +183,9 @@ def render_message(msg, show_thinking=False, collapse_results=None):
                 result_s = "\n\n---\n\n".join(result_texts)
                 n_lines = result_s.count("\n") + 1
                 if collapse_results is not None and n_lines > collapse_results:
-                    preview_lines = [ln for ln in result_s.splitlines() if ln.strip()][:3]
+                    preview_lines = [ln for ln in result_s.splitlines() if ln.strip()][
+                        :3
+                    ]
                     preview = "\n".join(preview_lines)
                     if n_lines > 3:
                         preview += "\n\u2026"
@@ -191,7 +197,9 @@ def render_message(msg, show_thinking=False, collapse_results=None):
                         f"\n\n{safe_fenced}\n\n</details>"
                     )
                 else:
-                    parts.append(f"**[TOOL RESULT \u2190 {tool_name}]**\n{fence(result_s)}")
+                    parts.append(
+                        f"**[TOOL RESULT \u2190 {tool_name}]**\n{fence(result_s)}"
+                    )
             continue
 
         value = block.get("text", {}).get("value", "").strip()
@@ -250,7 +258,10 @@ def load_thread(thread_dir):
             content = msg.get("content", [])
             has_renderable = any(
                 (c.get("type") == "text" and c.get("text", {}).get("value", "").strip())
-                or (c.get("type") == "reasoning" and c.get("text", {}).get("value", "").strip())
+                or (
+                    c.get("type") == "reasoning"
+                    and c.get("text", {}).get("value", "").strip()
+                )
                 or (c.get("type") == "tool_call" and c.get("output"))
                 for c in content
             )

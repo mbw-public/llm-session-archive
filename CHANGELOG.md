@@ -17,6 +17,10 @@ Tool results in Claude Code sessions are stored as `user`-role messages
   `tool_use` block. `extract()` now does a first pass over all records to
   build a `tool_use_id → name` map, which is passed through to
   `flatten_content()` for both user and assistant messages.
+- **`is_tool_results_only` check** — uses `not any(non-empty text block)` rather
+  than `all(type == tool_result)`, so stray metadata blocks in the content
+  list don't prevent the `TOOL RESULTS` label. Mixed messages that contain
+  both a `tool_result` block and genuine human text correctly stay as `USER`.
 - **`is_error` flag** — `tool_result` blocks with `is_error: true` now
   render as `TOOL ERROR` rather than `TOOL RESULT`.
 

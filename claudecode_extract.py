@@ -170,7 +170,9 @@ def remove_empty_fences(text):
     return text.strip()
 
 
-def flatten_content(blocks, show_thinking=False, collapse_results=None, tool_id_name_map=None):
+def flatten_content(
+    blocks, show_thinking=False, collapse_results=None, tool_id_name_map=None
+):
     """Render a content block array to markdown."""
     parts = []
     for block in blocks:
@@ -360,7 +362,10 @@ def extract(
             is_tool_results_only = (
                 isinstance(content, list)
                 and bool(content)
-                and all(b.get("type") == "tool_result" for b in content)
+                and not any(
+                    b.get("type") == "text" and str(b.get("text", "")).strip()
+                    for b in content
+                )
             )
             msg_num += 1
             if show_transcript:
@@ -368,7 +373,9 @@ def extract(
                 label = "TOOL RESULTS" if is_tool_results_only else "USER"
                 lines.append(f"**[{msg_num}] {label}**\n")
                 if isinstance(content, list):
-                    rendered = flatten_content(content, show_thinking, collapse_results, tool_id_name_map)
+                    rendered = flatten_content(
+                        content, show_thinking, collapse_results, tool_id_name_map
+                    )
                     if rendered:
                         lines.append(rendered)
                 else:
@@ -405,7 +412,9 @@ def extract(
 
             msg_num += 1
             if show_transcript:
-                rendered = flatten_content(blocks, show_thinking, collapse_results, tool_id_name_map)
+                rendered = flatten_content(
+                    blocks, show_thinking, collapse_results, tool_id_name_map
+                )
                 if rendered:
                     lines += ["\n---\n", f"**[{msg_num}] ASSISTANT**\n", rendered, ""]
 
