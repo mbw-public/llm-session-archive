@@ -4,6 +4,24 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-07  claudecode_extract: fix tool_result label and name lookup
+
+Tool results in Claude Code sessions are stored as `user`-role messages
+(Anthropic API convention). Two rendering problems fixed:
+
+- **`[N] USER` label on tool-result-only messages** — when a user message
+  contains only `tool_result` blocks (no human text), it is now labelled
+  `[N] TOOL RESULTS` instead of `[N] USER`.
+- **Tool name showing as `?`** — `tool_result` blocks carry a `tool_use_id`
+  but not the tool name; the name lives in the preceding assistant's
+  `tool_use` block. `extract()` now does a first pass over all records to
+  build a `tool_use_id → name` map, which is passed through to
+  `flatten_content()` for both user and assistant messages.
+- **`is_error` flag** — `tool_result` blocks with `is_error: true` now
+  render as `TOOL ERROR` rather than `TOOL RESULT`.
+
+---
+
 ## 2026-06-07  rename-extract-files.sh: files, validation, truncation, -d
 
 - **Multiple path arguments** — accepts any mix of files and directories;
