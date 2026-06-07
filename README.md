@@ -205,6 +205,33 @@ Jan sessions are stored in `~/Library/Application Support/Jan/data/threads/`
 `messages.jsonl`. Override with `--threads-dir DIR` or the `JAN_THREADS`
 environment variable.
 
+### Renaming extracted files
+
+`rename-extract-files.sh` renames extract files whose filenames don't match
+their `# Title` heading — useful after bulk exports, where filenames are
+UUIDs or epoch timestamps.
+
+```bash
+# Rename all extracts in a directory
+./rename-extract-files.sh JanTests
+
+# Preview without making changes
+./rename-extract-files.sh -d LmStudioTests
+./rename-extract-files.sh --dry-run LmStudioTests
+
+# Single file or glob
+./rename-extract-files.sh session.md
+./rename-extract-files.sh *.md
+
+# Multiple directories in one pass
+./rename-extract-files.sh --dry-run JanTests LmStudioTests
+```
+
+Files that don't look like llm-session-archive extracts (no recognised
+metadata on line 2) are skipped with a `NOT EXTRACT` warning. Filenames
+are capped at 64 characters (word boundary), so unusually long session
+titles are truncated cleanly.
+
 ### Splitting large files
 
 ```bash

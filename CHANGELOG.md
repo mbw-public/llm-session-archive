@@ -4,11 +4,27 @@ All changes in reverse chronological order.
 
 ---
 
-## 2026-06-06  rename-extract-tests.sh: promote to reusable tool
+## 2026-06-07  rename-extract-files.sh: files, validation, truncation, -d
+
+- **Multiple path arguments** — accepts any mix of files and directories;
+  directories are still processed non-recursively. Enables `*.md` globs and
+  multi-directory passes in one invocation.
+- **`is_extract()` guard** — files without a `# Title` first line and a
+  recognised metadata field on line 2 are skipped with a `NOT EXTRACT`
+  warning and counted in the summary.
+- **Filename truncation** — stems longer than `MAX_STEM` (default 64) are
+  sliced at the last word boundary (underscore) before the limit; a
+  `(truncated)` flag appears on the rename line.
+- **`-d` short option** added as alias for `--dry-run`.
+- README updated with a dedicated `rename-extract-files.sh` usage section.
+
+---
+
+## 2026-06-06  rename-extract-files.sh: promote to reusable tool
 
 Originally `rename-jan-tests-01.sh`, a one-shot script for renaming Jan
 test exports. Proved equally useful on LM Studio exports, so promoted to
-a proper reusable tool as `rename-extract-tests.sh`.
+a proper reusable tool as `rename-extract-files.sh`.
 
 - Directory taken as a required positional argument (was hardcoded to
   `JanTests` via a `JANTEST_DIR` env var fallback)
