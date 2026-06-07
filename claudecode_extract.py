@@ -170,7 +170,7 @@ def remove_empty_fences(text):
     return text.strip()
 
 
-def flatten_content(blocks, show_thinking=False, collapse_results=None):
+def flatten_content(blocks, show_thinking=False, collapse_results=None, tool_id_name_map=None):
     """Render a content block array to markdown."""
     parts = []
     for block in blocks:
@@ -198,7 +198,10 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
             parts.append(f"**[TOOL CALL \u2192 {name}]**\n{fence(params, 'json')}")
 
         elif t == "tool_result":
-            name = block.get("name", "?")
+            tid = block.get("tool_use_id", "")
+            name = (tool_id_name_map or {}).get(tid, "?")
+            is_error = block.get("is_error", False)
+            prefix = "TOOL ERROR" if is_error else "TOOL RESULT"
             raw = block.get("content", "")
             if isinstance(raw, list):
                 texts = [i.get("text", "") for i in raw if i.get("type") == "text"]
@@ -212,14 +215,14 @@ def flatten_content(blocks, show_thinking=False, collapse_results=None):
                     preview += "\n\u2026"
                 preview_fenced = fence(preview)
                 safe_fenced = fence(close_unclosed_fences(raw))
-                summary = f"**[TOOL RESULT \u2190 {name}]**  *({n_lines} lines)*"
+                summary = f"**[{prefix} \u2190 {name}]**  *({n_lines} lines)*"
                 parts.append(
                     f"{summary}\n\n{preview_fenced}\n\n"
                     f"<details><summary>Show all {n_lines} lines\u2026</summary>"
                     f"\n\n{safe_fenced}\n\n</details>"
                 )
             else:
-                parts.append(f"**[TOOL RESULT \u2190 {name}]**\n{fence(raw)}")
+                parts.append(f"**[{prefix} \u2190 {name}]**\n{fence(raw)}")
 
     return "\n\n".join(p for p in parts if p)
 
@@ -315,6 +318,16 @@ def extract(
 
     lines = []
 
+    # First pass: build tool-use-id → name map from all assistant records
+    tool_id_name_map = {}
+    for r in records:
+        if r.get("type") == "assistant":
+            for block in r.get("message", {}).get("content", []):
+                if block.get("type") == "tool_use":
+                    tid = block.get("id", "")
+                    if tid:
+                        tool_id_name_map[tid] = block.get("name", "?")
+
     if show_transcript:
         lines += [
             f"# {title or 'Claude Code Session'}",
@@ -344,12 +357,18 @@ def extract(
             content = msg.get("content", "")
             if not content:
                 continue
+            is_tool_results_only = (
+                isinstance(content, list)
+                and bool(content)
+                and all(b.get("type") == "tool_result" for b in content)
+            )
             msg_num += 1
             if show_transcript:
                 lines.append("\n---\n")
-                lines.append(f"**[{msg_num}] USER**\n")
+                label = "TOOL RESULTS" if is_tool_results_only else "USER"
+                lines.append(f"**[{msg_num}] {label}**\n")
                 if isinstance(content, list):
-                    rendered = flatten_content(content, show_thinking, collapse_results)
+                    rendered = flatten_content(content, show_thinking, collapse_results, tool_id_name_map)
                     if rendered:
                         lines.append(rendered)
                 else:
@@ -386,7 +405,7 @@ def extract(
 
             msg_num += 1
             if show_transcript:
-                rendered = flatten_content(blocks, show_thinking, collapse_results)
+                rendered = flatten_content(blocks, show_thinking, collapse_results, tool_id_name_map)
                 if rendered:
                     lines += ["\n---\n", f"**[{msg_num}] ASSISTANT**\n", rendered, ""]
 
