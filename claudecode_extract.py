@@ -242,6 +242,7 @@ def scan_session(jsonl_path):
     model = None
     started = None
     total_output = 0
+    seen_ids: set = set()
 
     for line in jsonl_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -261,9 +262,13 @@ def scan_session(jsonl_path):
         if rtype == "assistant":
             if not model:
                 model = r.get("message", {}).get("model")
-            total_output += (
-                r.get("message", {}).get("usage", {}).get("output_tokens", 0)
-            )
+            msg_id = r.get("message", {}).get("id", "")
+            if not msg_id or msg_id not in seen_ids:
+                if msg_id:
+                    seen_ids.add(msg_id)
+                total_output += (
+                    r.get("message", {}).get("usage", {}).get("output_tokens", 0)
+                )
 
     return {
         "session_id": jsonl_path.stem,
@@ -342,6 +347,7 @@ def extract(
         ]
 
     msg_num = 0
+    seen_msg_ids: set = set()  # deduplicate split-record assistant messages
     usage_totals = {"input": 0, "output": 0, "cache_read": 0, "cache_created": 0}
     per_turn_usage = []
 
@@ -388,8 +394,13 @@ def extract(
             if not blocks:
                 continue
 
+            msg_id = msg.get("id", "")
+            first_occurrence = not msg_id or msg_id not in seen_msg_ids
+            if msg_id:
+                seen_msg_ids.add(msg_id)
+
             usage = msg.get("usage", {})
-            if usage:
+            if usage and first_occurrence:
                 inp = usage.get("input_tokens", 0)
                 out = usage.get("output_tokens", 0)
                 cr = usage.get("cache_read_input_tokens", 0)

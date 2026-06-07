@@ -4,6 +4,21 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-07  claudecode_extract: deduplicate split-record assistant messages
+
+Claude Code stores a single API response as multiple JSONL records sharing
+the same message `id` (one per content block type — typically a
+thinking-only record followed by a text/tool_use record). The extractor
+was counting the usage data from every record, inflating token totals by
+2-3× for sessions that use thinking.
+
+Fix: `extract()` and `scan_session()` now track seen message IDs in a
+`seen_msg_ids` set and only accumulate usage for the first occurrence of
+each `id`. Transcript rendering is unaffected — both records are still
+shown so thinking blocks and response text both appear.
+
+---
+
 ## 2026-06-07  claudecode_extract: fix tool_result label and name lookup
 
 Tool results in Claude Code sessions are stored as `user`-role messages
