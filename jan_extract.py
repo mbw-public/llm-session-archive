@@ -8,7 +8,7 @@ Usage:
     python3 jan_extract.py <session_id>
     python3 jan_extract.py <session_id> --stats-only
     python3 jan_extract.py <session_id> --transcript-only
-    python3 jan_extract.py <session_id> --show-thinking
+    python3 jan_extract.py <session_id> --no-thinking
     python3 jan_extract.py <session_id> --collapse-results
     python3 jan_extract.py <session_id> --collapse-results=40
     python3 jan_extract.py <session_id> --out session.md
@@ -149,17 +149,52 @@ def render_message(msg, show_thinking=False, collapse_results=None):
     """
     Render a Jan message's content array to markdown.
 
-    Jan content blocks have type "text" or "reasoning". Each has a
-    .text.value field containing the actual string.
+    Jan content blocks:
+      type="text"      — plain response text; text.value holds the string
+      type="reasoning" — thinking block;     text.value holds the string
+      type="tool_call" — combined tool call + result; has input, output,
+                         tool_name, tool_call_id fields (no text.value)
 
-    collapse_results is accepted for API consistency but Jan doesn't currently
-    produce tool result blocks in the same structure, so it is a no-op here.
+    collapse_results applied to tool_call output blocks.
     """
     parts = []
     for block in msg.get("content", []):
         btype = block.get("type", "")
-        value = block.get("text", {}).get("value", "").strip()
 
+        if btype == "tool_call":
+            # Jan stores the call and its result together in one block.
+            tool_name = block.get("tool_name", "?")
+            input_data = block.get("input", {})
+            output_data = block.get("output", [])
+
+            inp_s = json.dumps(input_data, indent=2) if isinstance(input_data, dict) else str(input_data)
+            parts.append(f"**[TOOL CALL \u2192 {tool_name}]**\n{fence(inp_s, 'json')}")
+
+            if output_data:
+                result_texts = [
+                    item.get("text", "")
+                    for item in output_data
+                    if isinstance(item, dict) and item.get("text", "")
+                ]
+                result_s = "\n\n---\n\n".join(result_texts)
+                n_lines = result_s.count("\n") + 1
+                if collapse_results is not None and n_lines > collapse_results:
+                    preview_lines = [ln for ln in result_s.splitlines() if ln.strip()][:3]
+                    preview = "\n".join(preview_lines)
+                    if n_lines > 3:
+                        preview += "\n\u2026"
+                    safe_fenced = fence(close_unclosed_fences(result_s))
+                    parts.append(
+                        f"**[TOOL RESULT \u2190 {tool_name}]**  *({n_lines} lines)*\n\n"
+                        f"{fence(preview)}\n\n"
+                        f"<details><summary>Show all {n_lines} lines\u2026</summary>"
+                        f"\n\n{safe_fenced}\n\n</details>"
+                    )
+                else:
+                    parts.append(f"**[TOOL RESULT \u2190 {tool_name}]**\n{fence(result_s)}")
+            continue
+
+        value = block.get("text", {}).get("value", "").strip()
         if not value:
             continue
 
@@ -207,15 +242,19 @@ def load_thread(thread_dir):
         if not line:
             continue
         msg = json.loads(line)
-        # Skip the ghost empty assistant placeholder Jan creates at thread start
+        # Skip the ghost empty assistant placeholder Jan creates at thread start.
+        # Check all renderable block types — a message with only a reasoning block
+        # (no text block at all) must NOT be dropped: all() over an empty iterable
+        # returns True vacuously, which was incorrectly filtering real responses.
         if msg.get("role") == "assistant":
             content = msg.get("content", [])
-            all_empty = all(
-                not c.get("text", {}).get("value", "").strip()
+            has_renderable = any(
+                (c.get("type") == "text" and c.get("text", {}).get("value", "").strip())
+                or (c.get("type") == "reasoning" and c.get("text", {}).get("value", "").strip())
+                or (c.get("type") == "tool_call" and c.get("output"))
                 for c in content
-                if c.get("type") == "text"
             )
-            if all_empty:
+            if not has_renderable:
                 continue
         messages.append(msg)
 
@@ -479,18 +518,25 @@ if __name__ == "__main__":
         help="Transcript only, no stats tables",
     )
     ap.add_argument(
-        "--show-thinking",
-        action="store_true",
-        help="Include thinking blocks in transcript",
+        "--no-thinking",
+        dest="show_thinking",
+        action="store_false",
+        help="Exclude thinking blocks from transcript",
     )
+    ap.set_defaults(show_thinking=True)
     ap.add_argument(
         "--collapse-results",
         metavar="N",
         type=int,
         nargs="?",
         const=20,
-        default=None,
-        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+        default=20,
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default 20)",
+    )
+    ap.add_argument(
+        "--no-collapse",
+        action="store_true",
+        help="Show all TOOL RESULT blocks untruncated",
     )
     ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
     src.add_argument(
@@ -513,7 +559,7 @@ if __name__ == "__main__":
 
     show_t = not args.stats_only
     show_s = not args.transcript_only
-    collapse = args.collapse_results
+    collapse = None if args.no_collapse else args.collapse_results
     tdir = args.threads_dir
 
     if args.list:

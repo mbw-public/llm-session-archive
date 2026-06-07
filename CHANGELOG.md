@@ -4,6 +4,83 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-06  rename-extract-tests.sh: promote to reusable tool
+
+Originally `rename-jan-tests-01.sh`, a one-shot script for renaming Jan
+test exports. Proved equally useful on LM Studio exports, so promoted to
+a proper reusable tool as `rename-extract-tests.sh`.
+
+- Directory taken as a required positional argument (was hardcoded to
+  `JanTests` via a `JANTEST_DIR` env var fallback)
+- `--help` / `-h` added with `usage()` function
+- Proper option parsing loop — `--dry-run` and the directory accepted in
+  either order; unknown options error with usage
+- Dry run now reports a count (`N would rename | N already correct | N
+  conflicts`) instead of just "Dry run complete"
+- `moved` counter incremented during dry run so the summary is accurate
+- Phonemes special-case removed (was Jan-specific; general rule handles it)
+- No `.md` files found now exits 0 (not an error)
+- Output labels aligned (`SKIP`, `DRY RUN`, `MOVED`, `CONFLICT`)
+
+---
+
+## 2026-06-06  jan_extract: fix ghost-placeholder filter swallowing reasoning-only responses
+
+`load_thread()` skipped assistant messages whose text blocks were all empty,
+intended to drop Jan's ghost placeholder created at thread start. The check
+used `all(... for c in content if c.get("type") == "text")` — when an
+assistant response contained *only* a `"reasoning"` block (no text block),
+the filtered generator was empty and Python's `all()` returned `True`
+vacuously, causing the real response to be silently dropped.
+
+Fix: replaced the `all_empty` text-only check with a `has_renderable` check
+across all three known renderable block types (`text`, `reasoning`,
+`tool_call`). A ghost placeholder has only empty text blocks and will
+correctly produce `has_renderable=False`; a reasoning-only response will
+now correctly produce `has_renderable=True` and be kept.
+
+Affected sessions: any Jan thread where the assistant responded with only
+a reasoning block and no plain text block (observed with Hermes-4-14B).
+
+---
+
+## 2026-06-06  jan_extract: handle tool_call blocks
+
+Jan's `"type": "tool_call"` blocks combine a tool call and its result in
+a single content block (with `tool_name`, `input`, `output` fields and no
+`text.value`). The previous `render_message()` gated on `text.value` and
+silently dropped these blocks entirely, so tool-enabled sessions (e.g.
+Qwen3.5-9B with web search) were missing all search calls and results.
+
+- Added `tool_call` handling before the `text.value` gate in
+  `render_message()`: renders the input as `TOOL CALL`, then the
+  concatenated `output[].text` values as `TOOL RESULT`, with full
+  collapse/expand support respecting `collapse_results`.
+- Updated `render_message()` docstring to document all three block types.
+
+Note: Qwen2.5-Coder-14B's "thinking" content is stored as a plain
+`"text"` block with no `<think>` tags or `"reasoning"` wrapper — Jan
+does not classify it as a reasoning block, so it cannot be detected or
+collapsed by the extractor.
+
+---
+
+## 2026-06-06  Flip thinking and collapse to opt-out defaults
+
+Both features are now on by default — a bare `<session_id>` is all
+you need to get a fully rendered transcript.
+
+- `--show-thinking` removed; replaced by `--no-thinking` across all
+  four extractors (`claudecode`, `goose`, `jan`, `lmstudio`).  The
+  argparse implementation uses `dest="show_thinking"`,
+  `action="store_false"` + `set_defaults(show_thinking=True)`.
+- `--collapse-results` default changed from `None` to `20` across all
+  four extractors.  `--collapse-results=N` still overrides the
+  threshold; `--no-collapse` added as the escape hatch (sets
+  `collapse_results=None`, showing all TOOL RESULT blocks untruncated).
+
+---
+
 ## 2026-05-30  Widen Model column to 39
 
 Model width increased from 25 to 39.  Models longer than 39 chars

@@ -8,7 +8,7 @@ Usage:
     python3 lmstudio_extract.py --all --out-dir ./lmstudio_transcripts/
     python3 lmstudio_extract.py --all -n 10 --out-dir ./lmstudio_transcripts/
     python3 lmstudio_extract.py <file>
-    python3 lmstudio_extract.py <file> --show-thinking
+    python3 lmstudio_extract.py <session_id> --no-thinking
     python3 lmstudio_extract.py <file> --stats-only
     python3 lmstudio_extract.py <file> --transcript-only
     python3 lmstudio_extract.py <file> --collapse-results
@@ -527,18 +527,25 @@ if __name__ == "__main__":
         help="Transcript only, no stats tables",
     )
     ap.add_argument(
-        "--show-thinking",
-        action="store_true",
-        help="Include thinking blocks in transcript",
+        "--no-thinking",
+        dest="show_thinking",
+        action="store_false",
+        help="Exclude thinking blocks from transcript",
     )
+    ap.set_defaults(show_thinking=True)
     ap.add_argument(
         "--collapse-results",
         metavar="N",
         type=int,
         nargs="?",
         const=20,
-        default=None,
-        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+        default=20,
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default 20)",
+    )
+    ap.add_argument(
+        "--no-collapse",
+        action="store_true",
+        help="Show all TOOL RESULT blocks untruncated",
     )
     ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
     src.add_argument(
@@ -562,6 +569,7 @@ if __name__ == "__main__":
     show_t = not args.stats_only
     show_s = not args.transcript_only
     cdir = args.conversations_dir
+    collapse = None if args.no_collapse else args.collapse_results
 
     if args.list:
         list_conversations(n=args.n, conv_dir_override=cdir)
@@ -572,7 +580,7 @@ if __name__ == "__main__":
             transcript=show_t,
             show_thinking=args.show_thinking,
             stats=show_s,
-            collapse_results=args.collapse_results,
+            collapse_results=collapse,
             conv_dir_override=cdir,
             n=args.n,
         )
@@ -584,7 +592,7 @@ if __name__ == "__main__":
             show_transcript=show_t,
             show_thinking=args.show_thinking,
             show_stats=show_s,
-            collapse_results=args.collapse_results,
+            collapse_results=collapse,
             out_file=args.out,
         )
 

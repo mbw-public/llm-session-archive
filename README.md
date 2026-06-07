@@ -62,12 +62,14 @@ chmod +x *.py
 # Extract a session by ID
 ./goose_extract.py 20260503_1 > session.md
 
-# Include thinking blocks
-./goose_extract.py 20260503_1 --show-thinking > session.md
+# Suppress thinking blocks (shown by default)
+./goose_extract.py 20260503_1 --no-thinking > session.md
 
-# Extract with long tool results collapsed into <details> blocks
-./goose_extract.py 20260503_1 --collapse-results > session.md
+# Change the collapse threshold for tool results (default N=20)
 ./goose_extract.py 20260503_1 --collapse-results=40 > session.md
+
+# Show all tool results untruncated
+./goose_extract.py 20260503_1 --no-collapse > session.md
 
 # Export most recent N sessions to a directory
 ./goose_extract.py --all -n 10 --out-dir ./transcripts/
@@ -97,12 +99,14 @@ Override with `--db FILE` or the `GOOSE_DB` environment variable.
 # Extract a session by UUID (or unique substring)
 ./claudecode_extract.py 70e31d > session.md
 
-# Include thinking blocks
-./claudecode_extract.py 70e31d --show-thinking > session.md
+# Suppress thinking blocks (shown by default)
+./claudecode_extract.py 70e31d --no-thinking > session.md
 
-# Collapse tool results longer than N lines (default N=20)
-./claudecode_extract.py 70e31d --collapse-results > session.md
+# Change the collapse threshold for tool results (default N=20)
 ./claudecode_extract.py 70e31d --collapse-results=40 > session.md
+
+# Show all tool results untruncated
+./claudecode_extract.py 70e31d --no-collapse > session.md
 
 # Stats only — token counts, cache hits, stop reasons per turn
 ./claudecode_extract.py 70e31d --stats-only
@@ -136,12 +140,14 @@ as `.jsonl` files, one per session. Override with `--projects-dir DIR` or the
 # Extract by filename stem (or unique substring)
 ./lmstudio_extract.py 1777912439851 > session.md
 
-# Include thinking blocks (Qwen3 and other reasoning models)
-./lmstudio_extract.py 1777912439851 --show-thinking > session.md
+# Suppress thinking blocks (shown by default; Qwen3 and other reasoning models)
+./lmstudio_extract.py 1777912439851 --no-thinking > session.md
 
-# Collapse tool results longer than N lines (default N=20)
-./lmstudio_extract.py 1777912439851 --collapse-results > session.md
+# Change the collapse threshold for tool results (default N=20)
 ./lmstudio_extract.py 1777912439851 --collapse-results=40 > session.md
+
+# Show all tool results untruncated
+./lmstudio_extract.py 1777912439851 --no-collapse > session.md
 
 # Stats only — tok/s, time-to-first-token, context length per turn
 ./lmstudio_extract.py 1777912439851 --stats-only
@@ -171,8 +177,14 @@ Conversations are stored in `~/.lmstudio/conversations/`. Override with
 # Extract a session by UUID (or unique substring)
 ./jan_extract.py 63e1 > session.md
 
-# Include thinking blocks
-./jan_extract.py 63e1 --show-thinking > session.md
+# Suppress thinking blocks (shown by default)
+./jan_extract.py 63e1 --no-thinking > session.md
+
+# Change the collapse threshold for tool results (default N=20)
+./jan_extract.py 63e1 --collapse-results=40 > session.md
+
+# Show all tool results untruncated
+./jan_extract.py 63e1 --no-collapse > session.md
 
 # Stats only
 ./jan_extract.py 63e1 --stats-only
@@ -213,10 +225,11 @@ Each transcript includes:
 - **Session header** — tool, model, timestamps, working directory, token totals
 - **Full transcript** — user and assistant turns numbered sequentially with
   role headers
-- **Thinking blocks** — collapsible `<details>` sections for extended reasoning
-  (Goose, Claude Code, and Jan with `--show-thinking`)
+- **Thinking blocks** — collapsible `<details>` sections for extended reasoning,
+  shown by default across all four tools; suppress with `--no-thinking`
 - **Tool calls and results** — formatted with fenced code blocks; long results
-  optionally collapsed with `--collapse-results` (Goose, Claude Code, LM Studio)
+  collapsed by default at 20 lines; adjust threshold with `--collapse-results=N`
+  or disable entirely with `--no-collapse`
 - **Stats section** — token usage per turn (Claude Code, Jan) or performance
   metrics such as tokens/second and time-to-first-token (LM Studio), or tool
   call breakdown (Goose)

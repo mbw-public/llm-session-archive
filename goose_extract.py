@@ -7,7 +7,7 @@ Supports two input formats:
     python3 goose_extract.py --list
     python3 goose_extract.py --schema
     python3 goose_extract.py <session_id>
-    python3 goose_extract.py <session_id> --show-thinking
+    python3 goose_extract.py <session_id> --no-thinking
     python3 goose_extract.py <session_id> --stats-only
     python3 goose_extract.py <session_id> --transcript-only
     python3 goose_extract.py <session_id> --out session.md
@@ -765,18 +765,25 @@ if __name__ == "__main__":
         help="Transcript only, no stats tables",
     )
     ap.add_argument(
-        "--show-thinking",
-        action="store_true",
-        help="Include thinking blocks in transcript",
+        "--no-thinking",
+        dest="show_thinking",
+        action="store_false",
+        help="Exclude thinking blocks from transcript",
     )
+    ap.set_defaults(show_thinking=True)
     ap.add_argument(
         "--collapse-results",
         metavar="N",
         type=int,
         nargs="?",
         const=20,
-        default=None,
-        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default N=20)",
+        default=20,
+        help="Wrap TOOL RESULT blocks longer than N lines in <details> (default 20)",
+    )
+    ap.add_argument(
+        "--no-collapse",
+        action="store_true",
+        help="Show all TOOL RESULT blocks untruncated",
     )
     ap.add_argument("--out", metavar="FILE", help="Write to FILE instead of stdout")
     src.add_argument(
@@ -800,7 +807,7 @@ if __name__ == "__main__":
 
     show_t = not args.stats_only
     show_s = not args.transcript_only
-    collapse = args.collapse_results
+    collapse = None if args.no_collapse else args.collapse_results
 
     db = args.db
 
