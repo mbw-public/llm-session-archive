@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# extract_sessions — Interactive front-end for LLM session extractors
+#
+# Collects recent sessions from all detected LLM tools, sorts them newest-first,
+# and lets you pick one to extract.  Session IDs are handled internally.
+#
+# Place in the same directory as the *_extract.py scripts, or set LLM_DIR.
+# Requires bash 3.2+ (macOS default) and python3.
+
+set -euo pipefail
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DEFAULTS — edit these to change permanent behavior without using flags
+# ══════════════════════════════════════════════════════════════════════════════
+
+N=5                   # total sessions shown in menu      (-n N to override)
+NO_THINKING=false     # suppress thinking/reasoning blocks (--no-thinking)
+TRANSCRIPT_ONLY=false # output transcript only, skip stats (--transcript-only)
+STATS_ONLY=false      # output stats only, skip transcript (--stats-only)
+COLLAPSE=""           # collapse threshold: ""=extractor default (20), 0=off, N=override
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TOOL REGISTRY — parallel arrays (bash 3.2 compatible; no associative arrays)
+# Index 0 = claudecode (special-cased below for Project column normalisation)
+# ══════════════════════════════════════════════════════════════════════════════
+SCRIPTS=(claudecode_extract.py goose_extract.py jan_extract.py lmstudio_extract.py)
+LABELS=("Claude Code" "Goose" "Jan" "LM Studio")
+# Short tag used in auto-generated filenames
+TAGS=(cc goose jan lms)
+
+# ── Resolve extractor directory ───────────────────────────────────────────────
+LLM_DIR="${LLM_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+
+# ── Colors (auto-disabled when stdout is not a terminal) ──────────────────────
+if [[ -t 1 ]]; then
+    B=$'\e[1m' R=$'\e[0m' RD=$'\e[31m'
+else
+    B='' R='' RD=''
+fi
+
+die() {
+    printf '%s%s%s\n' "$RD" "$*" "$R" >&2
+    exit 1
+}
+
+# ── Usage ─────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+${B}extract_sessions${R} — interactive session picker for x3-convert_json
+
+USAGE
+    extract_sessions [OPTIONS]
+
+OPTIONS
+    -n N                    Total sessions to show (default: $N)
+    --no-thinking           Suppress thinking/reasoning blocks
+    --transcript-only       Transcript only (skip stats)
+    --stats-only            Stats only (skip transcript)
+    --collapse-results=N    Collapse tool results > N lines (""=default 20; 0=off)
+    --no-collapse           Show all tool results untruncated
+    -o FILE                 Write output to FILE
+    -a, --auto              Auto-name output file: YYYYMMDD-TOOL-NAME.md
+    -h, --help              This help
+
+PERMANENT DEFAULTS  (edit at top of extract_sessions)
+    N=$N  COLLAPSE=${COLLAPSE:-"(extractor default)"}  NO_THINKING=$NO_THINKING  TRANSCRIPT_ONLY=$TRANSCRIPT_ONLY
+
+EXAMPLES
+    extract_sessions                     pick from 5 most recent, output to stdout
+    extract_sessions -n 1 -a             output latest session to auto-named file
+    extract_sessions -n 10 -a            pick from 10 most recent, output to auto-named file
+    extract_sessions -o session.md       pick and write to a named file
+    extract_sessions --transcript-only
+    extract_sessions --no-thinking -a
+
+NOTES
+    Sessions from all available tools are merged and sorted newest-first.
+    Use --collapse-results=N (with =) to avoid argparse ambiguity.
+EOF
+}
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+OUT_FILE=""
+AUTO=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    -n)
+        N="$2"
+        shift 2
+        ;;
+    -n[0-9]*)
+        N="${1#-n}"
+        shift
+        ;;
+    --no-thinking)
+        NO_THINKING=true
+        shift
+        ;;
+    --no-collapse)
+        COLLAPSE=0
+        shift
+        ;;
+    --transcript-only)
+        TRANSCRIPT_ONLY=true
+        shift
+        ;;
+    --stats-only)
+        STATS_ONLY=true
+        shift
+        ;;
+    --collapse-results=*)
+        COLLAPSE="${1#*=}"
+        shift
+        ;;
+    -o)
+        OUT_FILE="$2"
+        shift 2
+        ;;
+    -a | --auto)
+        AUTO=true
+        shift
+        ;;
+    *) die "Unknown option: $1" ;;
+    esac
+done
+
+# ── Build extractor flag array ────────────────────────────────────────────────
+flags=()
+$NO_THINKING && flags+=(--no-thinking)
+$TRANSCRIPT_ONLY && flags+=(--transcript-only)
+$STATS_ONLY && flags+=(--stats-only)
+if [[ -n $COLLAPSE ]]; then
+    if [[ $COLLAPSE -eq 0 ]]; then
+        flags+=(--no-collapse)
+    else
+        flags+=(--collapse-results="$COLLAPSE")
+    fi
+fi
+
+# ── Tool detection ────────────────────────────────────────────────────────────
+num_tools=${#SCRIPTS[@]}
+avail_idx=()
+
+for ((i = 0; i < num_tools; i++)); do
+    script="$LLM_DIR/${SCRIPTS[$i]}"
+    if [[ -f $script ]] && python3 "$script" --list -n 1 >/dev/null 2>&1; then
+        avail_idx+=("$i")
+    fi
+done
+
+[[ ${#avail_idx[@]} -gt 0 ]] || die "No LLM session stores detected."
+
+# ── Collect sessions from all tools, sort newest-first, take top N ────────────
+#
+# Each extractor's --list output has session_id in column 1, datetime in
+# columns 2-3 (YYYY-MM-DD HH:MM:SS).  We emit tab-separated records:
+#   DATETIME <TAB> TOOL_IDX <TAB> FULL_LINE
+# then sort on field 1 (ISO datetime sorts correctly as plain text).
+
+sorted=$(
+    for i in "${avail_idx[@]}"; do
+        raw=$(python3 "$LLM_DIR/${SCRIPTS[$i]}" --list -n "$N" 2>/dev/null) || continue
+        while IFS= read -r line; do
+            [[ -z $line ]] && continue
+            # Skip separator rows
+            [[ $line =~ ^[-\ ]+$ ]] && continue
+            # Skip header rows (first token is all-alpha)
+            first="${line%%[[:space:]]*}"
+            [[ $first =~ ^[[:alpha:]]+$ ]] && continue
+            dt=$(awk '{print $2, $3}' <<<"$line")
+            printf '%s\t%s\t%s\n' "$dt" "$i" "$line"
+        done <<<"$raw"
+    done | sort -t$'\t' -k1,1r | head -n "$N"
+)
+
+[[ -n $sorted ]] || die "No sessions found."
+
+# ── Display menu ──────────────────────────────────────────────────────────────
+# Column layout after stripping session_id (always 17 chars + 2-space sep = 19):
+#   claudecode:  Created(20)  Tokens(10)  Model(30)  Project(30)  Name
+#   all others:  Created(20)  Tokens(10)  Model(39)               Name
+#
+# For claudecode rows we drop Project and widen Model to 39 to match the header.
+# Offsets into $rest (= fullline[19:]):
+#   [0:34]  = Created(20) + sep(2) + Tokens(10) + sep(2)
+#   [34:64] = Model (30 chars, claudecode only)
+#   [66:96] = Project (30 chars, claudecode only)
+#   [98:]   = Name (claudecode)  /  [75:] = Name (others, Model is 39 chars)
+# After claudecode normalisation all tools share: Name at offset 75 in $rest.
+
+HDR=$(printf '  %3s  %-12s  %-20s  %10s  %-39s  %s' \
+    '#' 'Tool' 'Created' 'Tokens' 'Model' 'Name')
+
+printf '\n%s\n%s\n\n' "$HDR" "${HDR//?/-}"
+
+entry_tool_idx=()
+entry_ids=()
+entry_dates=()
+entry_names=()
+num=0
+
+while IFS=$'\t' read -r dt tool_i fullline; do
+    num=$((num + 1))
+    sid=$(awk '{print $1}' <<<"$fullline")
+    rest="${fullline:19}"
+    # Normalise claudecode rows: drop Project, widen Model 30->39
+    if [[ $tool_i == "0" ]]; then
+        rest="${rest:0:34}$(printf '%-39s' "${rest:34:30}")  ${rest:98}"
+    fi
+    # Extract Name (offset 75 in normalised rest), trim leading spaces,
+    # then build a filename-safe slug (spaces and slashes -> underscores,
+    # truncated at 64 chars on a word boundary).
+    name_raw="${rest:75}"
+    leading="${name_raw%%[! ]*}"
+    name_trim="${name_raw#"$leading"}"
+    # Restrict slug to alphanumerics, underscores, and dashes; collapse runs
+    name_slug=$(printf '%s' "$name_trim" | sed 's/[^A-Za-z0-9_-]/_/g; s/_\{2,\}/_/g')
+    name_slug="${name_slug#_}"
+    name_slug="${name_slug%_}"
+    if [[ ${#name_slug} -gt 64 ]]; then
+        name_slug="${name_slug:0:64}"
+        [[ $name_slug == *_* ]] && name_slug="${name_slug%_*}"
+    fi
+    # Update rest to use the trimmed name for display (removes leading indent)
+    rest="${rest:0:75}${name_trim}"
+    entry_tool_idx+=("$tool_i")
+    entry_ids+=("$sid")
+    entry_dates+=("$dt")
+    entry_names+=("$name_slug")
+    printf '  %s%3d%s  %-12s  %s\n' "$B" "$num" "$R" "${LABELS[$tool_i]}" "$rest"
+done <<<"$sorted"
+
+printf '\n'
+
+# ── Pick ──────────────────────────────────────────────────────────────────────
+if [[ $num -eq 1 ]] && $AUTO; then
+    choice=1
+else
+    read -rp "Pick (1-$num), or q to quit: " choice </dev/tty
+fi
+
+[[ $choice == [qQ] ]] && exit 0
+
+if ! [[ $choice =~ ^[0-9]+$ ]] || ((choice < 1 || choice > num)); then
+    die "Invalid selection: $choice"
+fi
+
+idx=$((choice - 1))
+tool_i="${entry_tool_idx[$idx]}"
+sid="${entry_ids[$idx]}"
+
+# ── Resolve output filename ───────────────────────────────────────────────────
+if $AUTO; then
+    date_part="${entry_dates[$idx]}"
+    date_slug="${date_part%% *}"  # "YYYY-MM-DD" (or "?" if unknown)
+    date_slug="${date_slug//-/}"  # "YYYYMMDD"
+    [[ "$date_slug" == "?" ]] || [[ -z "$date_slug" ]] && date_slug="unknown"
+    name_slug="${entry_names[$idx]}"
+    # Fall back to session ID prefix if name is empty
+    [[ -z $name_slug ]] && name_slug="${sid:0:8}"
+    OUT_FILE="${date_slug}-${TAGS[$tool_i]}-${name_slug}.md"
+fi
+
+if [[ -n $OUT_FILE ]]; then
+    flags+=(--out "$OUT_FILE")
+    dest="$OUT_FILE"
+else
+    dest="stdout"
+fi
+
+printf '\n%sExtracting%s  [%s]  %s  ->  %s\n\n' \
+    "$B" "$R" "${LABELS[$tool_i]}" "$sid" "$dest"
+
+exec python3 "$LLM_DIR/${SCRIPTS[$tool_i]}" "${flags[@]}" "$sid"
