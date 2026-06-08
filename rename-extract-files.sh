@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-MAX_STEM=40   # max filename stem length (before .md); truncates at last word boundary
+MAX_STEM=40 # max filename stem length (before .md); truncates at last word boundary
 
 usage() {
     cat <<'EOF'
@@ -43,58 +43,65 @@ is_extract() {
     line1=$(sed -n '1p' "$f")
     line2=$(sed -n '2p' "$f")
     # Line 1: '# ' followed by a non-empty title
-    [[ "$line1" =~ ^#\ .+ ]]          || return 1
+    [[ $line1 =~ ^#\ .+ ]] || return 1
     # Line 2: a recognised metadata label (key: value)
-    [[ "$line2" =~ ^[A-Za-z][A-Za-z\ ]+:[[:space:]]+ ]] || return 1
+    [[ $line2 =~ ^[A-Za-z][A-Za-z\ ]+:[[:space:]]+ ]] || return 1
     return 0
 }
 
-moved=0; skipped=0; conflicts=0; not_extract=0
+moved=0
+skipped=0
+conflicts=0
+not_extract=0
 
 process_file() {
     local f="$1" first_line title new_name dir new_path
 
+    # shellcheck disable=SC2310
     if ! is_extract "$f"; then
         echo "NOT EXTRACT  $(basename "$f")" >&2
-        (( not_extract++ )) || true
+        ((not_extract++)) || true
         return
     fi
 
     first_line=$(head -1 "$f")
     title="${first_line#\# }"
-    new_name="${title// /_}"
+    # Restrict to alphanumerics, underscores, and dashes; collapse runs
+    new_name=$(printf '%s' "$title" | sed 's/[^A-Za-z0-9_-]/_/g; s/_\{2,\}/_/g')
+    new_name="${new_name#_}" # trim leading underscore
+    new_name="${new_name%_}" # trim trailing underscore
 
     # Truncate at word boundary if stem is too long
     local flag=""
     if [[ ${#new_name} -gt $MAX_STEM ]]; then
-        new_name="${new_name:0:$MAX_STEM}"
-        [[ "$new_name" == *_* ]] && new_name="${new_name%_*}"
+        new_name="${new_name:0:MAX_STEM}"
+        [[ $new_name == *_* ]] && new_name="${new_name%_*}"
         flag="  (truncated)"
     fi
     dir="$(dirname "$f")"
     new_path="${dir}/${new_name}.md"
 
     # Already correctly named
-    if [[ "$f" == "$new_path" ]]; then
+    if [[ $f == "$new_path" ]]; then
         echo "SKIP         $(basename "$f")"
-        (( skipped++ )) || true
+        ((skipped++)) || true
         return
     fi
 
     # Collision guard
-    if [[ -e "$new_path" ]]; then
+    if [[ -e $new_path ]]; then
         echo "CONFLICT     $(basename "$f")  ->  ${new_name}.md  (target exists)" >&2
-        (( conflicts++ )) || true
+        ((conflicts++)) || true
         return
     fi
 
     if $DRY_RUN; then
         echo "DRY RUN      $(basename "$f")  ->  ${new_name}.md${flag}"
-        (( moved++ )) || true
+        ((moved++)) || true
     else
         mv "$f" "$new_path"
         echo "MOVED        $(basename "$f")  ->  ${new_name}.md${flag}"
-        (( moved++ )) || true
+        ((moved++)) || true
     fi
 }
 
@@ -103,27 +110,37 @@ PATHS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dry-run|-d)  DRY_RUN=true ;;
-        -h|--help)  usage; exit 0 ;;
-        -*)         echo "ERROR: unknown option '$1'" >&2; echo >&2; usage >&2; exit 1 ;;
-        *)          PATHS+=("$1") ;;
+    --dry-run | -d) DRY_RUN=true ;;
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    -*)
+        echo "ERROR: unknown option '$1'" >&2
+        echo >&2
+        usage >&2
+        exit 1
+        ;;
+    *) PATHS+=("$1") ;;
     esac
     shift
 done
 
 if [[ ${#PATHS[@]} -eq 0 ]]; then
     echo "ERROR: at least one file or directory argument required" >&2
-    echo >&2; usage >&2; exit 1
+    echo >&2
+    usage >&2
+    exit 1
 fi
 
 for path in "${PATHS[@]}"; do
-    if [[ -f "$path" ]]; then
+    if [[ -f $path ]]; then
         process_file "$path"
-    elif [[ -d "$path" ]]; then
+    elif [[ -d $path ]]; then
         found=0
         for f in "$path"/*.md; do
-            [[ -e "$f" ]] || continue
-            (( found++ )) || true
+            [[ -e $f ]] || continue
+            ((found++)) || true
             process_file "$f"
         done
         [[ $found -gt 0 ]] || echo "No .md files found in '$path'"
