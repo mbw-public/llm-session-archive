@@ -4,6 +4,28 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-08  extract_sessions: overhaul auto-naming and UX
+
+- **Name-based auto-naming** — `-a` filenames now use the sanitized session
+  title (`YYYYMMDD-TOOL-Name.md`) instead of the session ID prefix.
+- **Whitelist sanitization** — name slugs restricted to `[A-Za-z0-9_-]`;
+  spaces, slashes, quotes, `?`, and all other characters replaced with `_`,
+  with runs collapsed. Same sanitization applied to `rename-extract-files.sh`.
+- **`-n 1 -a` skips confirmation** — when exactly one session is shown and
+  auto-naming is active, the pick prompt is bypassed.
+- **`?` date → `unknown`** — sessions with no stored timestamp produce
+  `unknown-TOOL-Name.md` instead of `?-TOOL-Name.md`.
+- **Display fixes** — leading spaces trimmed from Name column for sessions
+  where the title starts with whitespace (common in Claude Code sessions
+  with no explicit title).
+- **`--out-dir` removed** — meaningless for single-session extraction.
+- **Opt-out defaults aligned** — `SHOW_THINKING` → `NO_THINKING=false`,
+  `COLLAPSE` default changed to `""` (defer to extractor's built-in 20-line
+  default); `--no-thinking` and `--no-collapse` added.
+- README updated with an `extract_sessions` usage section.
+
+---
+
 ## 2026-06-07  claudecode_extract: deduplicate split-record assistant messages
 
 Claude Code stores a single API response as multiple JSONL records sharing
