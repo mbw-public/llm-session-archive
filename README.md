@@ -205,6 +205,36 @@ Jan sessions are stored in `~/Library/Application Support/Jan/data/threads/`
 `messages.jsonl`. Override with `--threads-dir DIR` or the `JAN_THREADS`
 environment variable.
 
+### Interactive picker
+
+`extract_sessions` is an interactive front-end that merges sessions from all
+detected tools into a single sorted menu.
+
+```bash
+# Pick from 5 most recent across all tools, output to stdout
+./extract_sessions
+
+# Output latest session to auto-named file
+./extract_sessions -n 1 -a
+
+# Pick from 10 most recent, output to auto-named file
+./extract_sessions -n 10 -a
+
+# Pick and write to a named file
+./extract_sessions -o session.md
+
+# Suppress thinking blocks
+./extract_sessions --no-thinking -a
+
+# Show all tool results untruncated
+./extract_sessions --no-collapse -a
+```
+
+Auto-named files use the format `YYYYMMDD-TOOL-Name.md` where `Name` is
+derived from the session title (sanitized to alphanumerics, underscores,
+and dashes, capped at 64 characters). `-n 1 -a` skips the confirmation
+prompt entirely — the single session is displayed and immediately extracted.
+
 ### Renaming extracted files
 
 `rename-extract-files.sh` renames extract files whose filenames don't match
@@ -229,8 +259,8 @@ UUIDs or epoch timestamps.
 
 Files that don't look like llm-session-archive extracts (no recognised
 metadata on line 2) are skipped with a `NOT EXTRACT` warning. Filenames
-are capped at 64 characters (word boundary), so unusually long session
-titles are truncated cleanly.
+are sanitized to alphanumerics, underscores, and dashes, capped at 64
+characters (word boundary).
 
 ### Splitting large files
 
