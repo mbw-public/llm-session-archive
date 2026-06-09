@@ -334,6 +334,21 @@ def load_session(path):
     return records
 
 
+def detect_branches(records):
+    """
+    Return the count of branch points — parent nodes with more than one child.
+    A branched session contains records from multiple conversation paths in the
+    same file.  Sequential extraction will interleave those paths, producing
+    scrambled output.  Any count > 0 means the session needs proper
+    leaf-to-root tree traversal rather than a linear read.
+    """
+    from collections import Counter
+    parent_counts = Counter(
+        r["parentId"] for r in records if r.get("parentId") is not None
+    )
+    return sum(1 for count in parent_counts.values() if count > 1)
+
+
 def scan_session(path):
     """
     Quick metadata scan for --list output.
@@ -344,6 +359,7 @@ def scan_session(path):
 
     cwd = None
     model = None
+    name = None
     total_output = 0
     session_ts = (
         None  # from session record (proper ISO); fall back to filename fragment
@@ -361,6 +377,8 @@ def scan_session(path):
         if rtype == "session":
             cwd = r.get("cwd")
             session_ts = r.get("timestamp") or ts_str
+        elif rtype == "session_info" and not name:
+            name = r.get("name") or r.get("displayName")
         elif rtype == "model_change" and not model:
             model = r.get("modelId")
         elif rtype == "message":
@@ -372,6 +390,7 @@ def scan_session(path):
         "path": path,
         "timestamp": session_ts or ts_str,
         "session_id": uuid_str or path.stem,
+        "name": name,
         "cwd": cwd,
         "model": model or "-",
         "output_tokens": total_output,
@@ -401,6 +420,7 @@ def extract(
     model = None
     provider = None
     thinking_level = None
+    session_name = None
 
     for r in records:
         rtype = r.get("type")
@@ -408,14 +428,26 @@ def extract(
             cwd = r.get("cwd")
             version = r.get("version")
             started = r.get("timestamp") or ts_str
+        elif rtype == "session_info" and not session_name:
+            session_name = r.get("name") or r.get("displayName")
         elif rtype == "model_change" and not model:
             model = r.get("modelId")
             provider = r.get("provider")
         elif rtype == "thinking_level_change" and not thinking_level:
             thinking_level = r.get("thinkingLevel")
 
+    branch_points = detect_branches(records)
+    if branch_points:
+        print(
+            f"Warning: {path.name}: {branch_points} branch point(s) detected — "
+            f"output may interleave content from multiple branches.",
+            file=sys.stderr,
+        )
+
     # ── Header (always shown) ──────────────────────────────────────────────────
-    if cwd:
+    if session_name:
+        title = session_name
+    elif cwd:
         parts = [p for p in Path(cwd).parts if p]
         title = "/".join(parts[-2:]) if len(parts) >= 2 else cwd
     else:
@@ -430,6 +462,8 @@ def extract(
         f"Session:   {session_id}",
         f"Started:   {fmt_ts(started)}",
     ]
+    if session_name:
+        lines.append(f"Name:      {session_name}")
     if model:
         lines.append(f"Model:     {model}")
     if provider:
@@ -440,6 +474,11 @@ def extract(
         lines.append(f"Version:   {version}")
     if cwd:
         lines.append(f"CWD:       {cwd}")
+    if branch_points:
+        lines.append(
+            f"\u26a0\ufe0f  WARNING: {branch_points} branch point(s) detected — "
+            f"output may interleave content from multiple branches."
+        )
     if collapse_results is not None:
         lines.append(f"Collapse threshold: tool results > {collapse_results} lines")
     lines.append("")
@@ -590,21 +629,25 @@ def list_sessions(n=None, sessions_dir_override=None):
         return s if len(s) <= width else s[: width - 1] + "\u2026"
 
     print(
-        f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<39}  Project"
+        f"{'Session ID':<17}  {'Created':<20}  {'Tokens':>10}  {'Model':<39}  Name"
     )
     print("-" * 110)
     for s in sessions:
         tok_s = f"{s['output_tokens']:,}" if s["output_tokens"] else "-"
         model = trunc(s["model"], 39)
-        cwd = s.get("cwd") or ""
-        if cwd:
-            parts = [p for p in Path(cwd).parts if p]
-            project = trunc("/".join(parts[-2:]), 28) if len(parts) >= 2 else cwd
+        # Prefer session_info name; fall back to cwd-derived project path
+        if s.get("name"):
+            display_name = trunc(s["name"], 40)
         else:
-            project = trunc(short_project(s["path"].parent.name), 28)
+            cwd = s.get("cwd") or ""
+            if cwd:
+                parts = [p for p in Path(cwd).parts if p]
+                display_name = trunc("/".join(parts[-2:]), 28) if len(parts) >= 2 else cwd
+            else:
+                display_name = trunc(short_project(s["path"].parent.name), 28)
         print(
             f"{s['session_id'][:17]:<17}  {fmt_ts(s['timestamp']):<20}  "
-            f"{tok_s:>10}  {model:<39}  {project}"
+            f"{tok_s:>10}  {model:<39}  {display_name}"
         )
 
 
