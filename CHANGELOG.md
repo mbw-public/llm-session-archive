@@ -4,6 +4,31 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-08  pi_extract.py: branch detection guard; session_info name support
+
+**Branch detection guard** — `detect_branches(records)` counts parent nodes
+with more than one child by running a `Counter` over all non-null `parentId`
+values.  Any count > 0 means the session has been branched and sequential
+extraction will interleave content from multiple paths.  When triggered:
+- A `Warning:` line is printed to stderr at extraction time.
+- A `⚠️ WARNING:` line is embedded in the output header so the alert is
+  preserved in any extracted `.md` file.
+Linear sessions (all `parentId` values unique) produce no output change.
+
+**`session_info` name support** — both `scan_session` and `extract` now scan
+for `type == "session_info"` records and read the `name` field (falling back
+to `displayName`).  When found:
+- `extract`: the name becomes the `#` heading and a `Name:` metadata line is
+  added to the header; the cwd-derived fallback title is still used when no
+  `session_info` record is present.
+- `--list`: the trailing column header changes from `Project` to `Name`; the
+  session name is shown when available (up to 40 chars), otherwise the
+  cwd-derived project path is shown as before.
+Monroe's current sessions have no `session_info` record, so `--list` output
+is unchanged until Pi generates one.
+
+---
+
 ## 2026-06-08  pi_extract.py: new extractor for Pi agent (experimental)
 
 Added `pi_extract.py`, an experimental extractor for
