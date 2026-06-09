@@ -4,6 +4,47 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-08  pi_extract.py: new extractor for Pi agent (experimental)
+
+Added `pi_extract.py`, an experimental extractor for
+[Pi](https://pi.dev), a local AI coding agent.
+
+Pi stores sessions under `~/.pi/agent/sessions/<encoded-project-path>/`
+as `<timestamp>_<uuid>.jsonl` files.  The format is structurally distinct
+from the other extractors:
+
+- **Linked-list record structure** — every record carries `id` and `parentId`
+  fields; extraction follows file order, which matches the chain for linear
+  sessions.
+- **Three message roles** — `user`, `assistant`, and `toolResult`; tool
+  results are first-class records (not embedded in user turns as in Claude
+  Code), and consecutive `toolResult` records from a multi-call assistant
+  turn are batched into a single `[N] TOOL RESULTS` section.
+- **Session-level metadata records** — `session`, `model_change`, and
+  `thinking_level_change` carry provenance data parsed into the header.
+- **Thinking blocks** — rendered in collapsible `<details>` by default;
+  suppress with `--no-thinking`.
+- **Token usage** — `input`, `output`, `cacheRead`, `cacheWrite` per
+  assistant turn (camelCase, unlike Claude Code’s snake_case fields).
+
+Features consistent with the other extractors: `--list`, `--all`, `-n`,
+`--no-thinking`, `--stats-only`, `--transcript-only`, `--collapse-results`,
+`--no-collapse`, `--out`, `--out-dir`, `--sessions-dir` / `PI_SESSIONS`.
+
+Post-review fixes (Monroe Williams):
+- `load_session()`: removed redundant `Path()` wrapping.
+- `render_tool_results()`: added shebang-based language inference (`bash`,
+  `python`) so preview and full fenced blocks carry the same lang hint.
+- `get_sessions_dir()`: `PI_SESSIONS` env-var path now validated for
+  existence, consistent with `--sessions-dir`.
+- `list_sessions()` and `export_all()`: `FileNotFoundError` (Pi not
+  installed) now caught and printed as a plain one-line message; no traceback.
+
+`pi_extract.py` added to `extract_sessions`; silently skipped when Pi is
+not installed.
+
+---
+
 ## 2026-06-08  extract_sessions: fix unbound-array crash and claudecode column mismatch
 
 - **`flags[@]: unbound variable`** — with `set -u` active, expanding an empty
