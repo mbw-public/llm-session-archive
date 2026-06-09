@@ -127,21 +127,24 @@ def remove_empty_fences(text):
 def close_unclosed_fences(content):
     """
     Detect and close any unclosed fenced code blocks in content.
-    An unclosed fence swallows subsequent turns in the markdown renderer.
+    Tracks backtick (```) and tilde (~~~) fences independently — a single
+    fence_char variable fails to close both if mixed fence types appear.
     """
-    fence_char = None
+    backtick_open = False
+    tilde_open = False
     for line in content.splitlines():
         stripped = line.strip()
-        if fence_char is None:
-            if stripped.startswith("```"):
-                fence_char = "```"
-            elif stripped.startswith("~~~"):
-                fence_char = "~~~"
-        else:
-            if stripped == fence_char or stripped.rstrip() == fence_char:
-                fence_char = None
-    if fence_char is not None:
-        return content.rstrip() + f"\n{fence_char}"
+        if stripped.startswith("```"):
+            backtick_open = not backtick_open
+        elif stripped.startswith("~~~"):
+            tilde_open = not tilde_open
+    closers = []
+    if backtick_open:
+        closers.append("```")
+    if tilde_open:
+        closers.append("~~~")
+    if closers:
+        return content.rstrip() + "\n" + "\n".join(closers)
     return content
 
 

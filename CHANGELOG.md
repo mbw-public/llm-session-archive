@@ -4,6 +4,40 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-08  extract_sessions: fix unbound-array crash and claudecode column mismatch
+
+- **`flags[@]: unbound variable`** — with `set -u` active, expanding an empty
+  array as `"${flags[@]}"` is treated as unbound in bash. Changed to the
+  safe pattern `${flags[@]+"${flags[@]}"}` on the final `exec` line.
+- **claudecode normalization removed** — the normalization block that widened
+  Model 30→39 and dropped Project was written for a now-defunct list format.
+  The current `claudecode_extract.py --list` format already uses Model=39 and
+  puts Name(28) before Project, matching all other tools. The normalization
+  was mangling the columns instead of fixing them. Replaced with a simple
+  `if/else` that bounds the name slug to 28 chars for claudecode (to exclude
+  the trailing Project) and uses the full remaining line for other tools.
+
+---
+
+## 2026-06-08  split_session: fix turn regex; close_unclosed_fences: dual-fence tracking
+
+Two fixes from a third-party code review.
+
+`split_session.py` — `TURN_RE` only matched `USER` and `ASSISTANT`, missing
+`SYSTEM` and `TOOL RESULTS` turns produced by `claudecode_extract`. Sessions
+with those turns would have incorrect chunk boundaries. Regex expanded to:
+`(USER|ASSISTANT|SYSTEM|TOOL RESULTS)`.
+
+`close_unclosed_fences` in `claudecode_extract`, `goose_extract`, and
+`jan_extract` — the previous single `fence_char` variable failed when both
+backtick and tilde fences appeared in the same block: opening a tilde fence
+while a backtick fence was already open would go undetected. Replaced with
+the dual-tracking pattern from `lmstudio_extract` (`backtick_open` and
+`tilde_open` toggled independently), which correctly closes both types when
+either or both are unclosed.
+
+---
+
 ## 2026-06-08  extract_sessions: overhaul auto-naming and UX
 
 - **Name-based auto-naming** — `-a` filenames now use the sanitized session

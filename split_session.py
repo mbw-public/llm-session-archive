@@ -11,7 +11,7 @@ import sys
 import argparse
 from pathlib import Path
 
-TURN_RE = re.compile(r"^\*\*\[(\d+)\] (USER|ASSISTANT)\*\*")
+TURN_RE = re.compile(r"^\*\*\[(\d+)\] (USER|ASSISTANT|SYSTEM|TOOL RESULTS)\*\*")
 
 
 def split_session(src: Path, turns_per_file: int = 75):

@@ -21,7 +21,7 @@ COLLAPSE=""           # collapse threshold: ""=extractor default (20), 0=off, N=
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TOOL REGISTRY — parallel arrays (bash 3.2 compatible; no associative arrays)
-# Index 0 = claudecode (special-cased below for Project column normalisation)
+# Index 0 = claudecode (Name field is bounded to 28 chars; Project follows)
 # ══════════════════════════════════════════════════════════════════════════════
 SCRIPTS=(claudecode_extract.py goose_extract.py jan_extract.py lmstudio_extract.py)
 LABELS=("Claude Code" "Goose" "Jan" "LM Studio")
@@ -182,16 +182,16 @@ sorted=$(
 
 # ── Display menu ──────────────────────────────────────────────────────────────
 # Column layout after stripping session_id (always 17 chars + 2-space sep = 19):
-#   claudecode:  Created(20)  Tokens(10)  Model(30)  Project(30)  Name
-#   all others:  Created(20)  Tokens(10)  Model(39)               Name
+#   all tools:  Created(20)  Tokens(10)  Model(39)  Name
+#   claudecode: Name is 28 chars wide, followed by sep + Project
 #
-# For claudecode rows we drop Project and widen Model to 39 to match the header.
-# Offsets into $rest (= fullline[19:]):
+# All tools share the same column layout; claudecode Name is 28 chars wide
+# followed by a Project field, while other tools have Name to end of line.
+# Offsets into $rest (= fullline[19:]) for all tools:
 #   [0:34]  = Created(20) + sep(2) + Tokens(10) + sep(2)
-#   [34:64] = Model (30 chars, claudecode only)
-#   [66:96] = Project (30 chars, claudecode only)
-#   [98:]   = Name (claudecode)  /  [75:] = Name (others, Model is 39 chars)
-# After claudecode normalisation all tools share: Name at offset 75 in $rest.
+#   [34:73] = Model (39 chars)
+#   [73:75] = sep
+#   [75:]   = Name  (claudecode: Name(28) + sep(2) + Project; others: Name only)
 
 HDR=$(printf '  %3s  %-12s  %-20s  %10s  %-39s  %s' \
     '#' 'Tool' 'Created' 'Tokens' 'Model' 'Name')
@@ -208,14 +208,13 @@ while IFS=$'\t' read -r dt tool_i fullline; do
     num=$((num + 1))
     sid=$(awk '{print $1}' <<<"$fullline")
     rest="${fullline:19}"
-    # Normalise claudecode rows: drop Project, widen Model 30->39
+    # For claudecode, Name is a 28-char field; slug it without the trailing Project.
+    # For all other tools, Name runs to end of line.
     if [[ $tool_i == "0" ]]; then
-        rest="${rest:0:34}$(printf '%-39s' "${rest:34:30}")  ${rest:98}"
+        name_raw="${rest:75:28}"
+    else
+        name_raw="${rest:75}"
     fi
-    # Extract Name (offset 75 in normalised rest), trim leading spaces,
-    # then build a filename-safe slug (spaces and slashes -> underscores,
-    # truncated at 64 chars on a word boundary).
-    name_raw="${rest:75}"
     leading="${name_raw%%[! ]*}"
     name_trim="${name_raw#"$leading"}"
     # Restrict slug to alphanumerics, underscores, and dashes; collapse runs
@@ -276,4 +275,4 @@ fi
 printf '\n%sExtracting%s  [%s]  %s  ->  %s\n\n' \
     "$B" "$R" "${LABELS[$tool_i]}" "$sid" "$dest"
 
-exec python3 "$LLM_DIR/${SCRIPTS[$tool_i]}" "${flags[@]}" "$sid"
+exec python3 "$LLM_DIR/${SCRIPTS[$tool_i]}" ${flags[@]+"${flags[@]}"} "$sid"
