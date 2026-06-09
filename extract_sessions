@@ -23,10 +23,10 @@ COLLAPSE=""           # collapse threshold: ""=extractor default (20), 0=off, N=
 # TOOL REGISTRY — parallel arrays (bash 3.2 compatible; no associative arrays)
 # Index 0 = claudecode (Name field is bounded to 28 chars; Project follows)
 # ══════════════════════════════════════════════════════════════════════════════
-SCRIPTS=(claudecode_extract.py goose_extract.py jan_extract.py lmstudio_extract.py)
-LABELS=("Claude Code" "Goose" "Jan" "LM Studio")
+SCRIPTS=(claudecode_extract.py goose_extract.py jan_extract.py lmstudio_extract.py pi_extract.py)
+LABELS=("Claude Code" "Goose" "Jan" "LM Studio" "Pi")
 # Short tag used in auto-generated filenames
-TAGS=(cc goose jan lms)
+TAGS=(cc goose jan lms pi)
 
 # ── Resolve extractor directory ───────────────────────────────────────────────
 LLM_DIR="${LLM_DIR:-$(cd "$(dirname "$0")" && pwd)}"

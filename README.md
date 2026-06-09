@@ -17,6 +17,7 @@ has been retired, or the service has gone offline.
 | [Claude Code](https://claude.ai/code) | JSONL session log (`.jsonl`) | `claudecode_extract.py` |
 | [LM Studio](https://lmstudio.ai) | JSON conversation file (`.json`) | `lmstudio_extract.py` |
 | [Jan](https://jan.ai) | JSONL thread log (`messages.jsonl`) | `jan_extract.py` |
+| [Pi](https://pi.dev) *(experimental)* | JSONL session log (per-project) | `pi_extract.py` |
 
 `split_session.py` is a utility for splitting large session transcripts into
 smaller chunks — useful when a markdown previewer struggles with multi-megabyte
@@ -205,6 +206,56 @@ Jan sessions are stored in `~/Library/Application Support/Jan/data/threads/`
 `messages.jsonl`. Override with `--threads-dir DIR` or the `JAN_THREADS`
 environment variable.
 
+### Pi  *(experimental)*
+
+```bash
+# List all sessions (across all projects)
+./pi_extract.py --list
+./pi_extract.py --list -n 10
+
+# Extract a session by UUID (or unique substring)
+./pi_extract.py 019e9045 > session.md
+
+# Pass an explicit file path
+./pi_extract.py ~/.pi/agent/sessions/--Users-you-Projects-myapp--/2026-06-04T01-35-38-832Z_019e9045.jsonl > session.md
+
+# Suppress thinking blocks (shown by default)
+./pi_extract.py 019e9045 --no-thinking > session.md
+
+# Change the collapse threshold for tool results (default N=20)
+./pi_extract.py 019e9045 --collapse-results=40 > session.md
+
+# Show all tool results untruncated
+./pi_extract.py 019e9045 --no-collapse > session.md
+
+# Stats only
+./pi_extract.py 019e9045 --stats-only
+
+# Transcript only
+./pi_extract.py 019e9045 --transcript-only > session.md
+
+# Write directly to a file
+./pi_extract.py 019e9045 --out session.md
+
+# Export most recent N sessions to a directory
+./pi_extract.py --all -n 10 --out-dir ./pi_transcripts/
+./pi_extract.py --all --out-dir ./pi_transcripts/
+```
+
+Pi sessions are stored in `~/.pi/agent/sessions/<encoded-project-path>/` as
+`<timestamp>_<uuid>.jsonl` files, one per session.  Override with
+`--sessions-dir DIR` or the `PI_SESSIONS` environment variable.
+
+Pi's JSONL format uses three message roles — `user`, `assistant`, and
+`toolResult` — where tool results are first-class records rather than being
+embedded in user turns.  Consecutive `toolResult` records from a multi-call
+assistant turn are batched into a single `TOOL RESULTS` section.  Session
+metadata (`model_change`, `thinking_level_change`) is parsed into the header.
+
+> **Note:** `pi_extract.py` is experimental and has been tested against a
+> limited sample of sessions.  The Pi session format may change without
+> notice.  Corrections and additional test cases are welcome.
+
 ### Interactive picker
 
 `extract_sessions` is an interactive front-end that merges sessions from all
@@ -287,7 +338,7 @@ Each transcript includes:
 - **Tool calls and results** — formatted with fenced code blocks; long results
   collapsed by default at 20 lines; adjust threshold with `--collapse-results=N`
   or disable entirely with `--no-collapse`
-- **Stats section** — token usage per turn (Claude Code, Jan) or performance
+- **Stats section** — token usage per turn (Claude Code, Jan, Pi) or performance
   metrics such as tokens/second and time-to-first-token (LM Studio), or tool
   call breakdown (Goose)
 
