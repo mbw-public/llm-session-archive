@@ -3,8 +3,8 @@
 # Rename llm-session-archive *.md extract files to match their # heading title.
 # The new filename is derived from the first line of each file:
 #   - Leading '# ' is stripped
-#   - Spaces are replaced with underscores
-#   - All other characters are preserved
+#   - Spaces and non-filename-safe characters are replaced with underscores
+#   - Dots, dashes, and alphanumerics are preserved
 #   - .md extension is kept
 
 set -euo pipefail
@@ -66,8 +66,8 @@ process_file() {
 
     first_line=$(head -1 "$f")
     title="${first_line#\# }"
-    # Restrict to alphanumerics, underscores, and dashes; collapse runs
-    new_name=$(printf '%s' "$title" | sed 's/[^A-Za-z0-9_-]/_/g; s/_\{2,\}/_/g')
+    # Restrict to alphanumerics, dots, underscores, and dashes; collapse runs
+    new_name=$(printf '%s' "$title" | sed 's/[^A-Za-z0-9._-]/_/g; s/_\{2,\}/_/g')
     new_name="${new_name#_}" # trim leading underscore
     new_name="${new_name%_}" # trim trailing underscore
 
