@@ -4,6 +4,19 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-10  rename-extract-files.sh: preserve dots in sanitised filenames
+
+The character allowlist in `process_file()` was `[A-Za-z0-9_-]`, which
+replaced dots with underscores — turning e.g. `Qwen3.5-9B-MTP` into
+`Qwen3_5_9B_MTP`.  Dots are valid and meaningful in model-name stems
+(version numbers), so the allowlist is widened to `[A-Za-z0-9._-]`.
+Characters that are genuinely problematic in filenames (spaces, colons,
+slashes, glob chars, etc.) are still replaced.
+
+Updated the inline comment and the file-header description to match.
+
+---
+
 ## 2026-06-08  pi_extract.py: branch detection guard; session_info name support
 
 **Branch detection guard** — `detect_branches(records)` counts parent nodes
