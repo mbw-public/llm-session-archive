@@ -4,6 +4,17 @@ All changes in reverse chronological order.
 
 ---
 
+## 2026-06-15  extract_sessions: preserve dots in auto-generated filenames
+
+The `name_slug` sanitization in the menu/auto-name logic used the same
+`[A-Za-z0-9_-]` allowlist that `rename-extract-files.sh` had before its
+2026-06-10 fix, so `-a` auto-named output files turned dots in model names
+into underscores (e.g. `Qwen3.5-9B-MTP` -> `Qwen3_5_9B_MTP`). Widened to
+`[A-Za-z0-9._-]` to match `rename-extract-files.sh`, so dots in model-name
+stems are preserved in both tools.
+
+---
+
 ## 2026-06-10  rename-extract-files.sh: preserve dots in sanitised filenames
 
 The character allowlist in `process_file()` was `[A-Za-z0-9_-]`, which
